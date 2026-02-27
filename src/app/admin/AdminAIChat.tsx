@@ -97,8 +97,8 @@ export function AdminAIChat() {
       setAnswer(text);
       setHistory((prev) => [{ question: q, answer: text }, ...prev].slice(0, 3));
       setQuestion("");
-    } catch {
-      setError("回答を取得できませんでした");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "回答を取得できませんでした");
     } finally {
       setLoading(false);
     }

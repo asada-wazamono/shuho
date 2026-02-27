@@ -177,9 +177,10 @@ ${question}`;
 担当者は ProjectAssignee と User をJOINして、"担当者" 列に「部署:氏名」を連結して入れてください。`
         : "";
 
-      const sqlPrompt = `あなたはSQLiteのクエリ生成AIです。
+      const sqlPrompt = `あなたはPostgreSQLのクエリ生成AIです。
 以下のスキーマを元に、質問に答えるSELECT文を生成してください。
 コードブロックなしで、SQLのみを返してください。
+※PostgreSQL構文を使用すること（SQLite構文は使わないこと）。
 
 【スキーマ概要】
 - User: id, name, department, role
