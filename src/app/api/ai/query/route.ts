@@ -4,18 +4,18 @@ import { getSession } from "@/lib/auth";
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 const DOMAIN_SQL_RULES = `【用語ルール（厳守）】
-- 決定案件 = Project.status = 'good'
-- 提案案件 = Project.status IN ('undecided','bad')
-- Bad案件 = Project.status = 'bad'
-- 未定案件 = Project.status = 'undecided'
-- 部門予算 = Project.departmentBudget
-- 全体予算 = Project.totalBudget
-- 任意額 = Project.optionalAmount
-- クライアント名 = Client.name（JOIN）
-- 担当者名 = User.name（ProjectAssignee と User をJOIN）
+- 決定案件 = "Project".status = 'good'
+- 提案案件 = "Project".status IN ('undecided','bad')
+- Bad案件 = "Project".status = 'bad'
+- 未定案件 = "Project".status = 'undecided'
+- 部門予算 = "Project"."departmentBudget"
+- 全体予算 = "Project"."totalBudget"
+- 任意額 = "Project"."optionalAmount"
+- クライアント名 = "Client".name（JOIN）
+- 担当者名 = "User".name（"ProjectAssignee" と "User" をJOIN）
 
 【重要】
-- 「決定」「提案」を certainty や projectType で判定しないこと。必ず Project.status を使うこと。
+- 「決定」「提案」を certainty や projectType で判定しないこと。必ず status を使うこと。
 - テーブル名とカラム名は実在名のみを使うこと。
 - 返答はSQL本文のみ（説明文なし）。`;
 
@@ -109,12 +109,13 @@ function includesProposalKeyword(question: string): boolean {
 }
 
 function hasExpectedStatusCondition(sql: string, question: string): boolean {
+  // クォートあり("status")・なし(status)どちらにも対応
   const normalized = sql.toLowerCase().replace(/\s+/g, " ");
   if (includesDecidedKeyword(question)) {
-    return /status\s*=\s*'good'/.test(normalized);
+    return /"?status"?\s*=\s*'good'/.test(normalized);
   }
   if (includesProposalKeyword(question)) {
-    return /status\s+in\s*\(\s*'undecided'\s*,\s*'bad'\s*\)|status\s*!=\s*'good'|status\s*<>\s*'good'/.test(normalized);
+    return /"?status"?\s+in\s*\(\s*'undecided'\s*,\s*'bad'\s*\)|"?status"?\s*!=\s*'good'|"?status"?\s*<>\s*'good'/.test(normalized);
   }
   return true;
 }
@@ -161,52 +162,72 @@ ${question}`;
         ? `
 【案件一覧表の列ルール】
 案件の一覧を求められた場合は、可能な限り次の列をこの順番・この別名でSELECTしてください。
-- status AS "状態"
-- ownerDepartment AS "担当部署"
-- client.name AS "クライアント"
-- project.name AS "案件名"
-- projectType AS "種別"
-- businessContent AS "業務内容"
-- totalBudget AS "全体予算"
-- departmentBudget AS "部門予算"
-- optionalAmount AS "任意額"
-- periodStart AS "実施開始"
-- periodEnd AS "実施終了"
-- statusUpdatedAt AS "ステータス更新日"
-- updatedAt AS "最終更新日"
-担当者は ProjectAssignee と User をJOINして、"担当者" 列に「部署:氏名」を連結して入れてください。`
+- p.status AS "状態"
+- p."ownerDepartment" AS "担当部署"
+- c.name AS "クライアント"
+- p.name AS "案件名"
+- p."projectType" AS "種別"
+- p."businessContent" AS "業務内容"
+- p."totalBudget" AS "全体予算"
+- p."departmentBudget" AS "部門予算"
+- p."optionalAmount" AS "任意額"
+- p."periodStart" AS "実施開始"
+- p."periodEnd" AS "実施終了"
+- p."statusUpdatedAt" AS "ステータス更新日"
+- p."updatedAt" AS "最終更新日"
+担当者は "ProjectAssignee" と "User" をJOINして、"担当者" 列に u.department || ':' || u.name を連結して入れてください。`
         : "";
 
       const sqlPrompt = `あなたはPostgreSQLのクエリ生成AIです。
 以下のスキーマを元に、質問に答えるSELECT文を生成してください。
 コードブロックなしで、SQLのみを返してください。
-※PostgreSQL構文を使用すること（SQLite構文は使わないこと）。
 
-【重要: テーブル名のルール】
-テーブル名は必ずダブルクォートで囲むこと（PostgreSQLは大文字小文字を区別するため）。
-- 正: FROM "Project" / JOIN "User" / JOIN "ProjectAssignee" / JOIN "Client"
-- 誤: FROM project / FROM Project（クォートなし）
+【絶対ルール: 識別子のクォート】
+Prisma + PostgreSQLではテーブル名・camelCaseカラム名はダブルクォート必須。
+- テーブル名: 常にクォート → "Project", "User", "Client", "ProjectAssignee"
+- camelCaseカラム: 常にクォート → "clientId", "projectType", "ownerDepartment" など
+- 小文字のみのカラム: クォート不要 → id, name, status, note, role, email, department
 
-【スキーマ概要】
-- "User": id, name, department, role
-- "Client": id, name
-- "Project": id, name, projectType, status, proposalStatus, projectStatus,
-           totalBudget, departmentBudget, optionalAmount,
-           ownerDepartment, statusUpdatedAt, clientId
-- "ProjectAssignee": projectId, userId, businessLevel, workloadLevel, judgmentLevel
+【完全スキーマ（実際のカラム名）】
+"Project": id, name, status, note,
+  "clientId", "projectType", "proposalStatus", "projectStatus",
+  "totalBudget", "departmentBudget", "optionalAmount",
+  "ownerDepartment", "statusUpdatedAt", "proposalDate",
+  "periodStart", "periodEnd", "proposalEffortType", "mergedIntoId",
+  "businessContent", "businessLevel", "workloadLevel", "judgmentLevel",
+  certainty, "createdAt", "updatedAt"
+
+"User": id, name, email, department, role, "loginId", "createdAt", "updatedAt"
+
+"Client": id, name, note, "createdAt"
+
+"ProjectAssignee": id, "projectId", "userId",
+  "businessLevel", "workloadLevel", "judgmentLevel"
+
+【クエリ例】
+SELECT p.name, p."ownerDepartment", p."totalBudget", c.name AS "クライアント"
+FROM "Project" p
+JOIN "Client" c ON p."clientId" = c.id
+WHERE p.status = 'good'
+
+SELECT u.name, SUM(pa."businessLevel" + pa."workloadLevel" + pa."judgmentLevel" * 1.5) AS score
+FROM "User" u
+JOIN "ProjectAssignee" pa ON pa."userId" = u.id
+JOIN "Project" p ON pa."projectId" = p.id
+GROUP BY u.name
+ORDER BY score DESC
 
 ${DOMAIN_SQL_RULES}
 ${tableSqlInstruction}
 
 【人名条件ルール】
-- User.name の一致は完全一致(IN)より前方一致(LIKE)を優先する
-- 例: 山田なら User.name LIKE '山田%'
+- "User".name の一致は前方一致(LIKE)を優先する
+- 例: 山田なら u.name LIKE '山田%'
 
 【忙しさ比較ルール】
-- 「忙しい」「負荷比較」などは、案件数COUNTではなく負荷指標を優先
-- 担当者別の負荷は ProjectAssignee.businessLevel, ProjectAssignee.workloadLevel, ProjectAssignee.judgmentLevel を使う
-  workloadScore = ProjectAssignee.businessLevel + ProjectAssignee.workloadLevel + ProjectAssignee.judgmentLevel * 1.5
-- Project.businessLevel等はデフォルト値。担当者個別の負荷はProjectAssigneeを参照すること
+- 「忙しい」「負荷比較」などは件数COUNTではなく負荷指標を優先
+- 担当者別の負荷は "ProjectAssignee"."businessLevel", "workloadLevel", "judgmentLevel" を使う
+  workloadScore = pa."businessLevel" + pa."workloadLevel" + pa."judgmentLevel" * 1.5
 - 担当者比較ではこの workloadScore の合計または平均で比較する
 
 【質問】
