@@ -182,13 +182,18 @@ ${question}`;
 コードブロックなしで、SQLのみを返してください。
 ※PostgreSQL構文を使用すること（SQLite構文は使わないこと）。
 
+【重要: テーブル名のルール】
+テーブル名は必ずダブルクォートで囲むこと（PostgreSQLは大文字小文字を区別するため）。
+- 正: FROM "Project" / JOIN "User" / JOIN "ProjectAssignee" / JOIN "Client"
+- 誤: FROM project / FROM Project（クォートなし）
+
 【スキーマ概要】
-- User: id, name, department, role
-- Client: id, name
-- Project: id, name, projectType, status, proposalStatus, projectStatus,
+- "User": id, name, department, role
+- "Client": id, name
+- "Project": id, name, projectType, status, proposalStatus, projectStatus,
            totalBudget, departmentBudget, optionalAmount,
            ownerDepartment, statusUpdatedAt, clientId
-- ProjectAssignee: projectId, userId, businessLevel, workloadLevel, judgmentLevel
+- "ProjectAssignee": projectId, userId, businessLevel, workloadLevel, judgmentLevel
 
 ${DOMAIN_SQL_RULES}
 ${tableSqlInstruction}
