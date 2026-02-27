@@ -1,13 +1,13 @@
 // 週報・案件管理システム データモデル
-// 想定: SQLite（社内50人程度・高負荷不要）
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")       // Neon pooled connection（Vercel本番用）
+  directUrl = env("DIRECT_URL")         // Neon direct connection（migrate/db push用）
 }
 
 // 部署マスタ（固定: 1DCD, 2DCD, 3DCD, 戦略PL）
