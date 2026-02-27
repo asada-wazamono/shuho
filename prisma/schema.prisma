@@ -1,0 +1,113 @@
+// 週報・案件管理システム データモデル
+// 想定: SQLite（社内50人程度・高負荷不要）
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 部署マスタ（固定: 1DCD, 2DCD, 3DCD, 戦略PL）
+model User {
+  id           String   @id @default(cuid())
+  loginId      String   @unique // ログインID
+  passwordHash String
+  name         String
+  email        String   @unique // ログイン・リマインド送信先
+  department   String   // 1DCD | 2DCD | 3DCD | 戦略PL
+  role         String   // admin | staff
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignees ProjectAssignee[]
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  department String? // 任意
+  note      String?
+  createdAt DateTime @default(now())
+  disabledAt DateTime? // 無効化（紐付く案件がある場合の削除代替）
+
+  projects Project[]
+}
+
+// 重複グループ：同一案件とみなす案件の集まり。集計時はグループ内「主案件」の部門予算を採用
+model DuplicateGroup {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  projects Project[]
+}
+
+// 案件
+model Project {
+  id          String   @id @default(cuid())
+  duplicateGroupId String?
+  isPrimaryInGroup Boolean @default(false) // 重複グループ内で集計に使う主レコード
+
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id])
+  name       String   // 案件名
+  projectType String  // 指名(決定) | AE提案 | 自主提案 | 競合コンペ
+  certainty  String   // 決定 | A(70%) | B(50%) | C(30%)
+  businessContent String // グラフィック制作 | 映像制作 | WEB制作 | イベント制作 | PR | インフルエンサー | コンサル
+
+  businessLevel   Int  // 1-5 業務レベル（時間量）
+  workloadLevel   Int  // 1-5 稼働負荷レベル
+  judgmentLevel   Int  // 1-5 判断負荷レベル
+
+  totalBudget     Float? // 全体予算
+  departmentBudget Float? // 部門予算（自部署の売上見込み）
+  optionalAmount  Float? // 任意額
+
+  proposalDate    DateTime? // 提案日
+  periodStart     DateTime? // 実施予定開始
+  periodEnd       DateTime? // 実施予定終了
+
+  status          String   @default("undecided") // good | bad | undecided
+  proposalStatus  String?  // 提案案件ステータス
+  proposalEffortType String? // existing_continuation | existing_new | fully_new
+  projectStatus   String?  // 決定案件ステータス
+  statusUpdatedAt DateTime? // ステータス最終更新日
+  note            String?
+  ownerDepartment String   // 部門予算の対象部署（1DCD等）
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt // 最終更新日（放置判定に使用）
+
+  duplicateGroup DuplicateGroup? @relation(fields: [duplicateGroupId], references: [id])
+  assignees   ProjectAssignee[]
+
+  mergedIntoId String? // 統合済みの場合の主案件ID
+  mergedInto   Project?  @relation("MergedProjects", fields: [mergedIntoId], references: [id])
+  mergedProjects Project[] @relation("MergedProjects")
+}
+
+// AIアシスタントのクエリログ（管理者のみ閲覧）
+model AiQueryLog {
+  id        String   @id @default(cuid())
+  userId    String
+  userName  String
+  question  String
+  mode      String   // "A"(SQL集計系) or "B"(JSON分析系)
+  createdAt DateTime @default(now())
+}
+
+// 案件-担当者 多対多（同一案件に複数担当者）
+model ProjectAssignee {
+  id              String   @id @default(cuid())
+  projectId       String
+  userId          String
+  businessLevel   Int      @default(1) // 1-5 業務レベル（担当者別）
+  workloadLevel   Int      @default(1) // 1-5 稼働負荷レベル（担当者別）
+  judgmentLevel    Int      @default(1) // 1-5 判断負荷レベル（担当者別）
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}

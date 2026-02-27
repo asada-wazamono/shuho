@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 週報・案件管理システム
 
-## Getting Started
+全体マネジメントの簡易化・視覚化、部員の週報入力の簡素化を目的とした社内向けアプリです。
 
-First, run the development server:
+## 技術スタック
+
+- **Next.js 14** (App Router) + TypeScript
+- **Prisma** + SQLite
+- **Tailwind CSS**
+- 認証: ID/パスワード、署名付きCookieセッション
+
+## セットアップ
 
 ```bash
+npm install
+cp .env.example .env   # 必要に応じて編集
+npx prisma migrate dev
+npm run seed           # 初期管理者: admin / admin、サンプルクライアント
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ブラウザで http://localhost:3000 を開き、**admin / admin** でログインしてください。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 環境変数 (.env)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 変数 | 説明 |
+|------|------|
+| DATABASE_URL | SQLite の場合 `file:./dev.db` |
+| SESSION_SECRET | セッション署名用（本番では必ず変更） |
+| SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM | リマインドメール送信用（未設定時はログのみ） |
+| CRON_SECRET | リマインドAPI呼び出し時の Bearer トークン（任意） |
 
-## Learn More
+## 主な機能
 
-To learn more about Next.js, take a look at the following resources:
+### 部員
+- **マイページ**: 提案案件一覧 / 決定案件一覧、サマリー（決定売上・任意額・負荷スコア・判定）
+- **新規案件入力**: 必須は最小限（クライアント・案件名・種別・業務内容・レベル3種）
+- **案件詳細**: Good/Bad・確度・レベル・部門予算・任意額・期間・備考の編集
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 管理者
+- **案件一覧**: 決定/提案タブ、担当部署・担当者・最終更新日
+- **全体数値サマリー**: 決定案件数・売上合計、部署別売上/件数/平均負荷、担当者別負荷ランキング
+- **部員管理**: 新規追加、パスワード再発行
+- **クライアント管理**: 追加・削除（紐付き案件がある場合は無効化）
+- **AIアシスタント**: 初期は見た目のみ（スタブ）
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 案件重複統合
+- `POST /api/admin/projects/merge` で `primaryId` と `otherIds` を指定し同一案件として統合
+- 集計では重複グループ内の部門予算は最大値を採用
 
-## Deploy on Vercel
+### 放置・リマインド
+- **放置条件**: 確度B/Cで最終更新7日超、または実施開始7日以内かつ最終更新7日超
+- **放置一覧**: `GET /api/admin/abandoned`（管理者）
+- **リマインド送信**: `GET /api/cron/remind`（cron や手動。CRON_SECRET を付与可）。本人にメール送信
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 負荷スコア
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- 案件負荷 = 業務レベル + 稼働負荷レベル + (判断負荷レベル × 1.5)、最大 17.5
+- 担当者負荷 = 担当案件の案件負荷の合計
+- 判定: 〜10 余裕あり / 11〜18 通常稼働 / 19〜25 やや過多 / 26〜35 高負荷 / 36〜 過負荷
+
+## 部員CSV取り込み
+
+管理者の「部員管理」画面から CSV をアップロードできます。  
+1行目はヘッダー（loginId, password, name, email, department, role）としてください。
