@@ -222,6 +222,9 @@ export async function PATCH(
     body.judgmentLevel !== undefined ? Number(body.judgmentLevel) : existing.judgmentLevel;
 
   if (nextStatus === "good") {
+    if (deptBudgetNum == null) {
+      return Response.json({ error: "決定案件には部門予算を入力してください" }, { status: 400 });
+    }
     if (!nextProjectStatus || !(PROJECT_STATUS_OPTIONS as readonly string[]).includes(nextProjectStatus)) {
       return Response.json({ error: "決定案件ステータスは必須です" }, { status: 400 });
     }

@@ -119,6 +119,9 @@ export async function POST(request: NextRequest) {
   if (normalizedStatus === "good") certaintyVal = "決定";
 
   if (normalizedStatus === "good") {
+    if (deptBudgetNum == null) {
+      return Response.json({ error: "決定案件には部門予算を入力してください" }, { status: 400 });
+    }
     if (!projectStatusValue || !(PROJECT_STATUS_OPTIONS as readonly string[]).includes(projectStatusValue)) {
       return Response.json({ error: "決定案件ステータスは必須です" }, { status: 400 });
     }

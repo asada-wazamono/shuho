@@ -97,6 +97,10 @@ export default function NewProjectPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (form.status === "good" && !form.departmentBudget) {
+      setError("決定案件には部門予算を入力してください");
+      return;
+    }
     const budgetError = validateBudget();
     if (budgetError) {
       setError(budgetError);
@@ -323,8 +327,19 @@ export default function NewProjectPage() {
             <input type="number" {...r("totalBudget")} className="w-full rounded border border-stone-300 px-3 py-2" />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-stone-700">部門予算</label>
-            <input type="number" {...r("departmentBudget")} className="w-full rounded border border-stone-300 px-3 py-2" />
+            <label className="mb-1 block text-sm font-medium text-stone-700">
+              部門予算
+              {form.status === "good" && <span className="ml-1 text-red-500">*</span>}
+            </label>
+            <input
+              type="number"
+              {...r("departmentBudget")}
+              className={`w-full rounded border px-3 py-2 ${
+                form.status === "good" && !form.departmentBudget
+                  ? "border-red-400 bg-red-50"
+                  : "border-stone-300"
+              }`}
+            />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-700">任意額</label>
@@ -334,6 +349,9 @@ export default function NewProjectPage() {
         {(() => {
           const total = form.totalBudget ? Number(form.totalBudget) : null;
           const dept = form.departmentBudget ? Number(form.departmentBudget) : null;
+          if (form.status === "good" && dept === null) {
+            return <p className="rounded bg-red-50 p-2 text-sm text-red-700">決定案件には部門予算を入力してください</p>;
+          }
           if (total !== null && dept !== null && dept > total) {
             return <p className="rounded bg-amber-50 p-2 text-sm text-amber-700">部門予算は全体予算以下にしてください</p>;
           }

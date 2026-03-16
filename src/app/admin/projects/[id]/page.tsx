@@ -139,6 +139,10 @@ export default function ProjectDetailPage() {
   }
 
   function handleSave() {
+    if (form.status === "good" && !form.departmentBudget) {
+      alert("決定案件には部門予算を入力してください");
+      return;
+    }
     const budgetError = validateBudget();
     if (budgetError) {
       alert(budgetError);
@@ -417,12 +421,19 @@ export default function ProjectDetailPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm text-stone-600">部門予算</label>
+              <label className="mb-1 block text-sm text-stone-600">
+                部門予算
+                {form.status === "good" && <span className="ml-1 text-red-500">*</span>}
+              </label>
               <input
                 type="number"
                 value={form.departmentBudget ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, departmentBudget: e.target.value ? Number(e.target.value) : null }))}
-                className="w-full rounded border border-stone-300 px-3 py-2"
+                className={`w-full rounded border px-3 py-2 ${
+                  form.status === "good" && !form.departmentBudget
+                    ? "border-red-400 bg-red-50"
+                    : "border-stone-300"
+                }`}
               />
             </div>
             <div>
@@ -438,6 +449,9 @@ export default function ProjectDetailPage() {
           {(() => {
             const total = form.totalBudget ? Number(form.totalBudget) : null;
             const dept = form.departmentBudget ? Number(form.departmentBudget) : null;
+            if (form.status === "good" && dept === null) {
+              return <p className="rounded bg-red-50 p-2 text-sm text-red-700">決定案件には部門予算を入力してください</p>;
+            }
             if (total !== null && dept !== null && dept > total) {
               return <p className="rounded bg-amber-50 p-2 text-sm text-amber-700">部門予算は全体予算以下にしてください</p>;
             }
