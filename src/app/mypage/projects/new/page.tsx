@@ -324,7 +324,7 @@ export default function NewProjectPage() {
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-700">全体予算</label>
-            <input type="number" {...r("totalBudget")} className="w-full rounded border border-stone-300 px-3 py-2" />
+            <input type="number" {...r("totalBudget")} className="no-spinner w-full rounded border border-stone-300 px-3 py-2" />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-700">
@@ -334,7 +334,7 @@ export default function NewProjectPage() {
             <input
               type="number"
               {...r("departmentBudget")}
-              className={`w-full rounded border px-3 py-2 ${
+              className={`no-spinner w-full rounded border px-3 py-2 ${
                 form.status === "good" && !form.departmentBudget
                   ? "border-red-400 bg-red-50"
                   : "border-stone-300"
