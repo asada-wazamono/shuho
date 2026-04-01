@@ -24,6 +24,7 @@ export default function NewSubProjectPage() {
 
   const [parentName, setParentName] = useState("");
   const [users, setUsers] = useState<User[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
