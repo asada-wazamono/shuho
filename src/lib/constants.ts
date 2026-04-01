@@ -2,9 +2,8 @@
 export const DEPARTMENTS = ["1DCD", "2DCD", "3DCD", "戦略PL"] as const;
 export type Department = (typeof DEPARTMENTS)[number];
 
-// 案件種別
+// 案件種別（「指名(決定)」は削除）
 export const PROJECT_TYPES = [
-  "指名(決定)",
   "AE提案",
   "自主提案",
   "競合コンペ",
@@ -36,9 +35,7 @@ export type BusinessContent = (typeof BUSINESS_CONTENTS)[number];
 export const PROJECT_RESULT_STATUS = ["good", "bad", "undecided"] as const;
 export type ProjectResultStatus = (typeof PROJECT_RESULT_STATUS)[number];
 
-// 負荷レベル 1〜5
-export const LOAD_LEVELS = [1, 2, 3, 4, 5] as const;
-
+// 提案案件ステータス
 export const PROPOSAL_STATUS_OPTIONS = [
   "preparing",
   "waiting_response",
@@ -48,80 +45,130 @@ export const PROPOSAL_STATUS_OPTIONS = [
 ] as const;
 export type ProposalStatus = (typeof PROPOSAL_STATUS_OPTIONS)[number];
 
-export const PROJECT_STATUS_OPTIONS = [
-  "preparing",
-  "in_progress",
-  "waiting_client",
-  "adjusting",
-  "on_hold",
-  "completed",
-  "ongoing",
-] as const;
-export type ProjectProgressStatus = (typeof PROJECT_STATUS_OPTIONS)[number];
-
 export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
-  preparing: "準備中",
+  preparing:       "準備中",
   waiting_response: "提案済・回答待ち",
-  following_up: "追客中",
-  re_proposing: "再提案中",
-  negotiating: "条件交渉中",
+  following_up:    "追客中",
+  re_proposing:    "再提案中",
+  negotiating:     "条件交渉中",
 };
 
-export const PROPOSAL_EFFORT_TYPES = [
-  "existing_continuation",
-  "existing_new",
-  "fully_new",
+// 親案件 実行フェーズステータス（Good確定後）
+export const EXECUTION_STATUS_OPTIONS = [
+  "active",
+  "suspended",
+  "completed",
 ] as const;
-export type ProposalEffortType = (typeof PROPOSAL_EFFORT_TYPES)[number];
+export type ExecutionStatus = (typeof EXECUTION_STATUS_OPTIONS)[number];
 
-export const PROPOSAL_EFFORT_LABELS: Record<ProposalEffortType, string> = {
-  existing_continuation: "既存継続",
-  existing_new: "既存新規",
-  fully_new: "完全新規",
+export const EXECUTION_STATUS_LABELS: Record<ExecutionStatus, string> = {
+  active:    "進行中",
+  suspended: "中断",
+  completed: "完了",
 };
 
-// 提案案件の負荷ウェイト（案件全体の重さ。担当者人数で均等割りして個人負荷を算出）
-export const PROPOSAL_EFFORT_WEIGHTS: Record<ProposalEffortType, number> = {
-  existing_continuation: 1.0,
-  existing_new: 2.5,
-  fully_new: 4.0,
+// 子案件ステータス
+export const SUB_PROJECT_STATUS_OPTIONS = [
+  "active",
+  "completed",
+] as const;
+export type SubProjectStatus = (typeof SUB_PROJECT_STATUS_OPTIONS)[number];
+
+export const SUB_PROJECT_STATUS_LABELS: Record<SubProjectStatus, string> = {
+  active:    "進行中",
+  completed: "完了",
 };
 
-export const PROJECT_STATUS_LABELS: Record<ProjectProgressStatus, string> = {
-  preparing: "準備中",
-  in_progress: "進行中",
-  waiting_client: "クライアント確認待ち",
-  adjusting: "調整中",
-  on_hold: "一時停止",
-  completed: "完了・納品済み",
-  ongoing: "継続運用中",
+// ─── 担当者負荷 2軸定義 ─────────────────────────────────────────
+
+// 軸① 関わり度
+export const INVOLVEMENT_OPTIONS = ["MAIN", "SUB", "ADVICE"] as const;
+export type Involvement = (typeof INVOLVEMENT_OPTIONS)[number];
+
+export const INVOLVEMENT_LABELS: Record<Involvement, string> = {
+  MAIN:   "メイン",
+  SUB:    "サブ",
+  ADVICE: "アドバイス",
 };
 
-// 負荷スコア係数（判断負荷レベル × JUDGMENT_WEIGHT。将来変更可能にする）
-export const JUDGMENT_WEIGHT = 1.5;
+// 軸② スキルレベル（案件単位で入力）
+export const SKILL_LEVEL_OPTIONS = [1, 2, 3] as const;
+export type SkillLevel = (typeof SKILL_LEVEL_OPTIONS)[number];
 
-// 担当者負荷スコア判定基準（要件どおり）
+export const SKILL_LEVEL_LABELS: Record<SkillLevel, string> = {
+  1: "Lv.1 — 都度サポートが必要",
+  2: "Lv.2 — 基本は自走できる",
+  3: "Lv.3 — 他者をリードできる",
+};
+
+// 負荷スコアマトリクス（関わり度 × スキルLv）
+export const LOAD_MATRIX: Record<Involvement, Record<SkillLevel, number>> = {
+  MAIN:   { 1: 10, 2: 7, 3: 5 },
+  SUB:    { 1: 6,  2: 4, 3: 3 },
+  ADVICE: { 1: 2,  2: 2, 3: 1 },
+};
+
+// 担当者負荷スコア判定基準
 export const LOAD_THRESHOLDS = {
-  UNDER: 10,   // 〜10：余裕あり
-  NORMAL: 18,  // 11〜18：通常稼働
-  HIGH: 25,    // 19〜25：やや過多
-  HEAVY: 35,   // 26〜35：高負荷
-  // 36以上：過負荷
+  UNDER:  10, // 〜10：余裕あり
+  NORMAL: 20, // 11〜20：通常稼働
+  HIGH:   32, // 21〜32：やや過多
+  HEAVY:  45, // 33〜45：高負荷
+  // 46以上：過負荷
 } as const;
 
 export function getLoadLabel(score: number): string {
-  if (score <= LOAD_THRESHOLDS.UNDER) return "余裕あり";
+  if (score <= LOAD_THRESHOLDS.UNDER)  return "余裕あり";
   if (score <= LOAD_THRESHOLDS.NORMAL) return "通常稼働";
-  if (score <= LOAD_THRESHOLDS.HIGH) return "やや過多";
-  if (score <= LOAD_THRESHOLDS.HEAVY) return "高負荷";
+  if (score <= LOAD_THRESHOLDS.HIGH)   return "やや過多";
+  if (score <= LOAD_THRESHOLDS.HEAVY)  return "高負荷";
   return "過負荷";
 }
 
-// 案件単体の負荷ラベル（案件負荷スコア: 2.5〜17.5 想定）
+// 子案件単体の負荷ラベル（スコア 1〜10）
 export function getProjectLoadLabel(score: number): string {
-  if (score < 7) return "軽い";
-  if (score < 10) return "標準";
-  if (score < 13) return "やや重い";
-  if (score < 16) return "重い";
+  if (score <= 3)  return "軽い";
+  if (score <= 5)  return "標準";
+  if (score <= 7)  return "やや重い";
+  if (score <= 9)  return "重い";
   return "非常に重い";
 }
+
+// 子案件業務内容（親案件より詳細な選択肢）
+export const SUB_PROJECT_BUSINESS_CONTENTS = [
+  // グラフィック系
+  "キービジュアル制作",
+  "フライヤー・チラシ",
+  "パンフレット・冊子",
+  "バナー広告",
+  "OOH・交通広告",
+  "パッケージデザイン",
+  // 映像系
+  "TV-CM制作",
+  "Web動画・SNS動画",
+  "プロモーション映像",
+  "記録・ドキュメント映像",
+  "ライブ配信",
+  // WEB系
+  "LP・特設サイト制作",
+  "コーポレートサイト",
+  "ECサイト",
+  "バナー・WEB素材",
+  "SNS運用・コンテンツ制作",
+  // イベント系
+  "店頭・POP UPイベント",
+  "展示会・見本市",
+  "セミナー・シンポジウム",
+  "社内イベント・式典",
+  "スポーツ・エンタメイベント",
+  // PR系
+  "プレスリリース・広報支援",
+  "メディアアプローチ",
+  "インフルエンサー施策",
+  // コンサル系
+  "戦略立案・コンサルティング",
+  "リサーチ・調査",
+  // その他
+  "その他",
+] as const;
+export type SubProjectBusinessContent = (typeof SUB_PROJECT_BUSINESS_CONTENTS)[number];

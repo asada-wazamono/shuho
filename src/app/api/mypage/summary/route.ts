@@ -1,85 +1,70 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assigneeLoadScore } from "@/lib/loadScore";
-import { getLoadLabel, PROPOSAL_EFFORT_WEIGHTS, type ProposalEffortType } from "@/lib/constants";
+import { getLoadLabel, type Involvement, type SkillLevel } from "@/lib/constants";
 
-// 部員マイページ用サマリー：決定売上・任意額合計・自分の負荷スコア・負荷判定
+// 部員マイページ用サマリー：決定売上・自分の負荷スコア・負荷判定
 export async function GET() {
   const session = await getSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const decidedAssignees = await prisma.projectAssignee.findMany({
+  // 自分がアサインされている進行中の子案件
+  const mySubAssignees = await prisma.subProjectAssignee.findMany({
     where: {
       userId: session.id,
-      project: { status: "good", mergedIntoId: null },
-    },
-    select: {
-      businessLevel: true,
-      workloadLevel: true,
-      judgmentLevel: true,
-      project: {
-        select: { departmentBudget: true, optionalAmount: true, projectStatus: true },
+      subProject: {
+        status: "active", // 完了を除外
+        parent: { status: "good", mergedIntoId: null },
       },
     },
-  });
-
-  const decidedSales = decidedAssignees.reduce((sum, a) => sum + (a.project.departmentBudget ?? 0), 0);
-
-  const optionalProjects = await prisma.project.findMany({
-    where: {
-      assignees: { some: { userId: session.id } },
-      status: "bad",
-      mergedIntoId: null,
-    },
     select: {
-      optionalAmount: true,
-    },
-  });
-  const optionalTotal = optionalProjects.reduce((sum, p) => sum + (p.optionalAmount ?? 0), 0);
-
-  // 決定案件の負荷（完了案件は除外）
-  const decidedLoad = assigneeLoadScore(
-    decidedAssignees
-      .filter((a) => a.project.projectStatus !== "completed")
-      .map((a) => ({
-        businessLevel: a.businessLevel,
-        workloadLevel: a.workloadLevel,
-        judgmentLevel: a.judgmentLevel,
-      }))
-  );
-
-  // 提案案件の負荷（担当者人数で均等割り）
-  const proposalAssignees = await prisma.projectAssignee.findMany({
-    where: {
-      userId: session.id,
-      project: { status: "undecided", mergedIntoId: null },
-    },
-    select: {
-      project: {
+      involvement: true,
+      skillLevel: true,
+      subProject: {
         select: {
-          proposalEffortType: true,
-          assignees: { select: { userId: true } },
+          id: true,
+          name: true,
+          departmentBudget: true,
+          parent: { select: { id: true, name: true, optionalAmount: true } },
         },
       },
     },
   });
 
-  const proposalLoad = proposalAssignees.reduce((sum, a) => {
-    const effortKey = (a.project.proposalEffortType ?? "existing_continuation") as ProposalEffortType;
-    const weight = PROPOSAL_EFFORT_WEIGHTS[effortKey] ?? PROPOSAL_EFFORT_WEIGHTS.existing_continuation;
-    const assigneeCount = a.project.assignees.length || 1;
-    return sum + weight / assigneeCount;
-  }, 0);
+  // 負荷スコア計算（2軸マトリクス）
+  const loadScore = assigneeLoadScore(
+    mySubAssignees.map((a) => ({
+      involvement: a.involvement as Involvement,
+      skillLevel: a.skillLevel as SkillLevel,
+    }))
+  );
 
-  const totalLoad = decidedLoad + proposalLoad;
-  const loadLabel = getLoadLabel(totalLoad);
+  // 売上：自分が担当する子案件の部門予算合計
+  // （optionalAmount は親案件レベルで加算。担当者が複数でも全額カウント）
+  const decidedSales = mySubAssignees.reduce(
+    (sum, a) => sum + (a.subProject.departmentBudget ?? 0),
+    0
+  );
+
+  // 自分が担当する Good 親案件の optionalAmount 合計
+  const myGoodProjects = await prisma.projectAssignee.findMany({
+    where: {
+      userId: session.id,
+      project: { status: "good", mergedIntoId: null },
+    },
+    select: { project: { select: { optionalAmount: true } } },
+  });
+  const optionalTotal = myGoodProjects.reduce(
+    (sum, a) => sum + (a.project.optionalAmount ?? 0),
+    0
+  );
 
   return Response.json({
     department: session.department,
     name: session.name,
     decidedSales,
     optionalTotal,
-    loadScore: Math.round(totalLoad * 10) / 10,
-    loadLabel,
+    loadScore: Math.round(loadScore * 10) / 10,
+    loadLabel: getLoadLabel(loadScore),
   });
 }

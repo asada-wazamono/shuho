@@ -1,17 +1,14 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { projectLoadScore } from "@/lib/loadScore";
-import {
-  DEPARTMENTS,
-  getLoadLabel,
-  PROPOSAL_EFFORT_WEIGHTS,
-  JUDGMENT_WEIGHT,
-} from "@/lib/constants";
+import { assigneeLoadScore } from "@/lib/loadScore";
+import { DEPARTMENTS, getLoadLabel, type Involvement, type SkillLevel } from "@/lib/constants";
 
 type Contributor = {
-  projectId: string;
-  projectName: string;
-  kind: "decided" | "proposal";
+  subProjectId: string;
+  subProjectName: string;
+  parentProjectName: string;
+  involvement: string;
+  skillLevel: number;
   contribution: number;
 };
 
@@ -19,13 +16,8 @@ type UserAggregate = {
   userId: string;
   name: string;
   department: string;
-  decidedLoad: number;
-  proposalLoad: number;
-  businessLoadSum: number;
-  workloadLoadSum: number;
-  judgmentLoadSum: number;
-  decidedCount: number;
-  proposalCount: number;
+  totalLoad: number;
+  subProjectCount: number;
   contributors: Contributor[];
 };
 
@@ -48,146 +40,115 @@ function relativeLabel(rank: number, total: number): string {
   return "標準";
 }
 
-// 全体数値サマリー：部署別売上・件数・負荷、担当者別負荷
 export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "admin") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const decided = await prisma.project.findMany({
-    where: { status: "good", mergedIntoId: null },
-    include: {
-      assignees: { include: { user: { select: { id: true, name: true, department: true, role: true } } } },
-      duplicateGroup: { include: { projects: { select: { departmentBudget: true } } } },
-    },
-  });
-
-  const proposal = await prisma.project.findMany({
-    where: { status: "undecided", mergedIntoId: null },
-    include: { assignees: { include: { user: { select: { id: true, name: true, department: true, role: true } } } } },
-  });
-
-  const byDept: Record<string, { sales: number; count: number }> = {};
-  for (const d of DEPARTMENTS) {
-    byDept[d] = { sales: 0, count: 0 };
-  }
-
-  const userAggregate: Record<string, UserAggregate> = {};
-  const decidedCounts: Record<string, number> = {};
-  const proposalCounts: Record<string, number> = {};
-
+  // 全ユーザー（staff）を取得
   const users = await prisma.user.findMany({
     where: { role: "staff" },
     select: { id: true, name: true, department: true },
   });
+
+  // 全subProject（進行中のもの）を一括取得
+  const subProjects = await prisma.subProject.findMany({
+    where: {
+      status: "active", // 完了を除外
+      parent: { status: "good", mergedIntoId: null },
+    },
+    include: {
+      parent: { select: { id: true, name: true, ownerDepartment: true, departmentBudget: true, optionalAmount: true } },
+      assignees: { include: { user: { select: { id: true, name: true, department: true } } } },
+    },
+  });
+
+  // 担当者別の集計マップを初期化
+  const userAgg: Record<string, UserAggregate> = {};
   for (const u of users) {
-    userAggregate[u.id] = {
-      userId: u.id,
-      name: u.name,
-      department: u.department,
-      decidedLoad: 0,
-      proposalLoad: 0,
-      businessLoadSum: 0,
-      workloadLoadSum: 0,
-      judgmentLoadSum: 0,
-      decidedCount: 0,
-      proposalCount: 0,
-      contributors: [],
+    userAgg[u.id] = {
+      userId: u.id, name: u.name, department: u.department,
+      totalLoad: 0, subProjectCount: 0, contributors: [],
     };
   }
 
-  for (const p of decided) {
+  // 部署別 売上集計（SubProjectのdepartmentBudget + 親のoptionalAmount）
+  // 親案件1件につき子案件の部門予算の合計を売上として集計
+  const byDept: Record<string, { sales: number; count: number }> = {};
+  for (const d of DEPARTMENTS) byDept[d] = { sales: 0, count: 0 };
+
+  // 親案件ごとに子案件の部門予算を合算（重複カウント防止）
+  const goodProjects = await prisma.project.findMany({
+    where: { status: "good", mergedIntoId: null },
+    include: {
+      subProjects: { select: { departmentBudget: true } },
+      duplicateGroup: { include: { projects: { select: { id: true, isPrimaryInGroup: true } } } },
+    },
+  });
+
+  for (const p of goodProjects) {
+    // 重複グループがある場合は主案件のみ集計
+    if (p.duplicateGroupId && !p.isPrimaryInGroup) continue;
     const dept = p.ownerDepartment;
-    const budgetInGroup = p.duplicateGroup?.projects?.length
-      ? Math.max(...p.duplicateGroup.projects.map((x) => x.departmentBudget ?? 0))
+    // 子案件がある場合は子案件の部門予算合計、ない場合は親の部門予算（移行データ）
+    const subBudget = p.subProjects.length > 0
+      ? p.subProjects.reduce((s, sp) => s + (sp.departmentBudget ?? 0), 0)
       : (p.departmentBudget ?? 0);
-    const salesContrib = budgetInGroup + (p.optionalAmount ?? 0);
+    const sales = subBudget + (p.optionalAmount ?? 0);
     if (byDept[dept]) {
-      byDept[dept].sales += salesContrib;
+      byDept[dept].sales += sales;
       byDept[dept].count += 1;
-    }
-    for (const a of p.assignees) {
-      const uid = a.userId;
-      const target = userAggregate[uid];
-      if (!target) continue;
-      const contribution =
-        p.projectStatus === "completed"
-          ? 0
-          : projectLoadScore(a.businessLevel, a.workloadLevel, a.judgmentLevel);
-      target.decidedLoad += contribution;
-      if (p.projectStatus !== "completed") {
-        target.businessLoadSum += a.businessLevel;
-        target.workloadLoadSum += a.workloadLevel;
-        target.judgmentLoadSum += a.judgmentLevel * JUDGMENT_WEIGHT;
-      }
-      target.contributors.push({
-        projectId: p.id,
-        projectName: p.name,
-        kind: "decided",
-        contribution,
-      });
-      if (!decidedCounts[uid]) decidedCounts[uid] = 0;
-      decidedCounts[uid] += 1;
     }
   }
 
-  for (const p of proposal) {
-    const effortKey = (p.proposalEffortType ?? "existing_continuation") as keyof typeof PROPOSAL_EFFORT_WEIGHTS;
-    const totalWeight = PROPOSAL_EFFORT_WEIGHTS[effortKey] ?? PROPOSAL_EFFORT_WEIGHTS.existing_continuation;
-    const assigneeCount = p.assignees.length || 1;
-    const contribution = totalWeight / assigneeCount; // 担当者人数で均等割り
-    for (const a of p.assignees) {
+  // 担当者別 負荷集計
+  for (const sp of subProjects) {
+    for (const a of sp.assignees) {
       const uid = a.userId;
-      const target = userAggregate[uid];
-      if (target) {
-        target.proposalLoad += contribution;
-        target.contributors.push({
-          projectId: p.id,
-          projectName: p.name,
-          kind: "proposal",
-          contribution,
-        });
-      }
-      if (!proposalCounts[uid]) proposalCounts[uid] = 0;
-      proposalCounts[uid] += 1;
+      const target = userAgg[uid];
+      if (!target) continue;
+      const score = assigneeLoadScore([{
+        involvement: a.involvement as Involvement,
+        skillLevel: a.skillLevel as SkillLevel,
+      }]);
+      target.totalLoad += score;
+      target.subProjectCount += 1;
+      target.contributors.push({
+        subProjectId: sp.id,
+        subProjectName: sp.name,
+        parentProjectName: sp.parent.name,
+        involvement: a.involvement,
+        skillLevel: a.skillLevel,
+        contribution: score,
+      });
     }
   }
 
   const totalSales = Object.values(byDept).reduce((s, d) => s + d.sales, 0);
 
-  // 部署別の平均負荷：baseRows 計算後に担当者 totalLoad の平均として算出
-  // （決定＋提案の両方を含む、担当者個別スコアベースの正確な値）
-  const deptLoadMap: Record<string, { sum: number; count: number }> = {};
-  for (const d of DEPARTMENTS) {
-    deptLoadMap[d] = { sum: 0, count: 0 };
-  }
-
+  // baseRows 生成
   const baseRows = users
     .map((u) => {
-      const agg = userAggregate[u.id];
-      const totalLoad = agg.decidedLoad + agg.proposalLoad;
+      const agg = userAgg[u.id];
       return {
         userId: u.id,
         name: u.name,
         department: u.department,
-        decidedLoad: agg.decidedLoad,
-        proposalLoad: agg.proposalLoad,
-        businessLoad: agg.businessLoadSum,
-        workloadLoad: agg.workloadLoadSum,
-        judgmentLoad: agg.judgmentLoadSum,
-        totalLoad,
-        absoluteLabel: getLoadLabel(totalLoad),
-        decidedCount: decidedCounts[u.id] ?? 0,
-        proposalCount: proposalCounts[u.id] ?? 0,
+        totalLoad: agg.totalLoad,
+        subProjectCount: agg.subProjectCount,
+        absoluteLabel: getLoadLabel(agg.totalLoad),
         topContributors: agg.contributors
           .sort((a, b) => b.contribution - a.contribution)
           .slice(0, 3),
+        score: agg.totalLoad,
       };
     })
     .sort((a, b) => b.totalLoad - a.totalLoad);
 
-  // 部署別avgLoad：担当者の totalLoad（決定＋提案、担当者個別スコアベース）の平均
+  // 部署別 avgLoad
+  const deptLoadMap: Record<string, { sum: number; count: number }> = {};
+  for (const d of DEPARTMENTS) deptLoadMap[d] = { sum: 0, count: 0 };
   for (const row of baseRows) {
     if (deptLoadMap[row.department]) {
       deptLoadMap[row.department].sum += row.totalLoad;
@@ -203,33 +164,27 @@ export async function GET() {
       : null,
   }));
 
-  const companyRanked = rankWithTies(
-    baseRows.map((r) => ({ ...r, score: r.totalLoad }))
-  );
+  // ランキング（全社・部署内）
+  const companyRanked = rankWithTies(baseRows);
   const companyTotal = companyRanked.length;
-
   const rowsWithCompany = companyRanked.map((r) => ({
     ...r,
     companyRank: r.rank,
     companyRankLabel: relativeLabel(r.rank, companyTotal),
   }));
 
-  const byDepartmentRows = new Map<string, Array<(typeof rowsWithCompany)[number]>>();
+  const byDeptRows = new Map<string, typeof rowsWithCompany>();
   for (const row of rowsWithCompany) {
-    const list = byDepartmentRows.get(row.department) ?? [];
+    const list = byDeptRows.get(row.department) ?? [];
     list.push(row);
-    byDepartmentRows.set(row.department, list);
+    byDeptRows.set(row.department, list);
   }
-
   const deptRankMap = new Map<string, { rank: number; label: string }>();
-  for (const [, rows] of Array.from(byDepartmentRows.entries())) {
-    const ranked = rankWithTies(rows.sort((a, b) => b.totalLoad - a.totalLoad).map((r) => ({ ...r, score: r.totalLoad })));
+  for (const [, rows] of Array.from(byDeptRows.entries())) {
+    const ranked = rankWithTies(rows.sort((a, b) => b.totalLoad - a.totalLoad));
     const deptTotal = ranked.length;
     for (const r of ranked) {
-      deptRankMap.set(r.userId, {
-        rank: r.rank,
-        label: relativeLabel(r.rank, deptTotal),
-      });
+      deptRankMap.set(r.userId, { rank: r.rank, label: relativeLabel(r.rank, deptTotal) });
     }
   }
 
@@ -237,26 +192,18 @@ export async function GET() {
     userId: r.userId,
     name: r.name,
     department: r.department,
-    decidedLoad: r.decidedLoad,
-    proposalLoad: r.proposalLoad,
-    businessLoad: r.businessLoad,
-    workloadLoad: r.workloadLoad,
-    judgmentLoad: r.judgmentLoad,
     totalLoad: r.totalLoad,
-    loadScore: r.totalLoad,
-    loadLabel: r.absoluteLabel,
     absoluteLabel: r.absoluteLabel,
+    subProjectCount: r.subProjectCount,
     deptRank: deptRankMap.get(r.userId)?.rank ?? 0,
     deptRankLabel: deptRankMap.get(r.userId)?.label ?? "標準",
     companyRank: r.companyRank,
     companyRankLabel: r.companyRankLabel,
-    decidedCount: r.decidedCount,
-    proposalCount: r.proposalCount,
     topContributors: r.topContributors,
   }));
 
   return Response.json({
-    totalCount: decided.length,
+    totalCount: goodProjects.length,
     totalSales,
     departmentSummary,
     assigneeRanking,

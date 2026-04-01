@@ -22,15 +22,16 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  assignees ProjectAssignee[]
+  assignees            ProjectAssignee[]
+  subProjectAssignees  SubProjectAssignee[]
 }
 
 model Client {
-  id        String   @id @default(cuid())
-  name      String
-  department String? // 任意
-  note      String?
-  createdAt DateTime @default(now())
+  id         String    @id @default(cuid())
+  name       String
+  department String?   // 任意
+  note       String?
+  createdAt  DateTime  @default(now())
   disabledAt DateTime? // 無効化（紐付く案件がある場合の削除代替）
 
   projects Project[]
@@ -44,48 +45,84 @@ model DuplicateGroup {
   projects Project[]
 }
 
-// 案件
+// 親案件
 model Project {
-  id          String   @id @default(cuid())
+  id               String  @id @default(cuid())
   duplicateGroupId String?
   isPrimaryInGroup Boolean @default(false) // 重複グループ内で集計に使う主レコード
 
-  clientId   String
-  client     Client   @relation(fields: [clientId], references: [id])
-  name       String   // 案件名
-  projectType String  // 指名(決定) | AE提案 | 自主提案 | 競合コンペ
-  certainty  String   // 決定 | A(70%) | B(50%) | C(30%)
-  businessContent String // グラフィック制作 | 映像制作 | WEB制作 | イベント制作 | PR | インフルエンサー | コンサル
+  clientId        String
+  client          Client  @relation(fields: [clientId], references: [id])
+  name            String  // 案件名
+  projectType     String  // AE提案 | 自主提案 | 競合コンペ
+  competitorSituation String? // 競合コンペ選択時のコンペ状況
+  certainty       String  // 決定 | A(70%) | B(50%) | C(30%)
+  businessContent String  // グラフィック制作 | 映像制作 | WEB制作 | イベント制作 | PR | インフルエンサー | コンサル
 
-  businessLevel   Int  // 1-5 業務レベル（時間量）
-  workloadLevel   Int  // 1-5 稼働負荷レベル
-  judgmentLevel   Int  // 1-5 判断負荷レベル
+  // 負荷レベル（旧3軸。既存データ保持のためnullable化。新規は SubProjectAssignee で管理）
+  businessLevel Int? // 1-5 業務レベル（時間量）
+  workloadLevel Int? // 1-5 稼働負荷レベル
+  judgmentLevel Int? // 1-5 判断負荷レベル
 
-  totalBudget     Float? // 全体予算
-  departmentBudget Float? // 部門予算（自部署の売上見込み）
-  optionalAmount  Float? // 任意額
+  totalBudget      Float?  // 全体予算（新規登録時に必須）
+  departmentBudget Float?  // 部門予算（既存データ保持用。新規は SubProject で管理）
+  optionalAmount   Float?  // 任意額（非表示中）
 
-  proposalDate    DateTime? // 提案日
-  periodStart     DateTime? // 実施予定開始
-  periodEnd       DateTime? // 実施予定終了
+  proposalDate DateTime? // 提案日
+  periodStart  DateTime? // 実施想定日（年月日、日不明時は1日）
+  periodEnd    DateTime? // 実施予定終了（既存データ保持用。新規は SubProject で管理）
 
-  status          String   @default("undecided") // good | bad | undecided
-  proposalStatus  String?  // 提案案件ステータス
-  proposalEffortType String? // existing_continuation | existing_new | fully_new
-  projectStatus   String?  // 決定案件ステータス
+  status          String    @default("undecided") // good | bad | undecided
+  badReason       String?   // Bad確定時の理由（必須入力）
+  proposalStatus  String?   // 提案案件ステータス
+  projectStatus   String?   // 実行フェーズステータス: active(進行中) | suspended(中断) | completed(完了)
   statusUpdatedAt DateTime? // ステータス最終更新日
   note            String?
-  ownerDepartment String   // 部門予算の対象部署（1DCD等）
+  ownerDepartment String    // メイン担当部署（1DCD等）
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt // 最終更新日（放置判定に使用）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // 最終更新日（放置判定に使用）
 
   duplicateGroup DuplicateGroup? @relation(fields: [duplicateGroupId], references: [id])
-  assignees   ProjectAssignee[]
+  assignees      ProjectAssignee[]
+  subProjects    SubProject[]
 
-  mergedIntoId String? // 統合済みの場合の主案件ID
-  mergedInto   Project?  @relation("MergedProjects", fields: [mergedIntoId], references: [id])
+  mergedIntoId   String?
+  mergedInto     Project?  @relation("MergedProjects", fields: [mergedIntoId], references: [id])
   mergedProjects Project[] @relation("MergedProjects")
+}
+
+// 子案件（プロジェクト）
+model SubProject {
+  id       String  @id @default(cuid())
+  parentId String
+  parent   Project @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  name             String  // プロジェクト名
+  status           String  @default("active") // active(進行中) | completed(完了)
+  departmentBudget Float?  // 部門予算（子案件単位で必須入力）
+  businessContent  String? // 子案件業務内容（詳細選択肢）
+  periodStart      DateTime? // 実施開始日（日不明時は1日）
+  periodEnd        DateTime? // 実施終了日（日不明時は1日）
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignees SubProjectAssignee[]
+}
+
+// 子案件-担当者 多対多（2軸負荷入力）
+model SubProjectAssignee {
+  id           String     @id @default(cuid())
+  subProjectId String
+  userId       String
+  involvement  String     // MAIN(メイン) | SUB(サブ) | ADVICE(アドバイス)
+  skillLevel   Int        // 1(都度サポートが必要) | 2(基本は自走できる) | 3(他者をリードできる)
+
+  subProject SubProject @relation(fields: [subProjectId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([subProjectId, userId])
 }
 
 // AIアシスタントのクエリログ（管理者のみ閲覧）
@@ -94,20 +131,23 @@ model AiQueryLog {
   userId    String
   userName  String
   question  String
+  answer    String?  // AI回答テキスト（履歴表示用）
   mode      String   // "A"(SQL集計系) or "B"(JSON分析系)
   createdAt DateTime @default(now())
 }
 
-// 案件-担当者 多対多（同一案件に複数担当者）
+// 親案件-担当者 多対多
 model ProjectAssignee {
-  id              String   @id @default(cuid())
-  projectId       String
-  userId          String
-  businessLevel   Int      @default(1) // 1-5 業務レベル（担当者別）
-  workloadLevel   Int      @default(1) // 1-5 稼働負荷レベル（担当者別）
-  judgmentLevel    Int      @default(1) // 1-5 判断負荷レベル（担当者別）
-  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String  @id @default(cuid())
+  projectId     String
+  userId        String
+  // 旧3軸負荷レベル（既存データ保持のためnullable化。新規案件は SubProjectAssignee で管理）
+  businessLevel Int?    // 1-5 業務レベル（担当者別）
+  workloadLevel Int?    // 1-5 稼働負荷レベル（担当者別）
+  judgmentLevel Int?    // 1-5 判断負荷レベル（担当者別）
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, userId])
 }
