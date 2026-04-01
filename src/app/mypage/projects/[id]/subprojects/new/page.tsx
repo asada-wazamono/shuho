@@ -24,7 +24,7 @@ export default function NewSubProjectPage() {
 
   const [parentName, setParentName] = useState("");
   const [users, setUsers] = useState<User[]>([]);
-  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+  const [_sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [continueAdding, setContinueAdding] = useState(false);

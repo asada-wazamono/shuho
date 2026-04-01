@@ -419,7 +419,7 @@ export function ProjectTabs() {
               {sorted.flatMap((p) => {
                 // 子案件レベルでフィルタリング
                 const hasSubFilter = !!(filters.businessContent || filters.periodStart || filters.periodEnd);
-                let visibleSps = p.subProjects.filter((sp) => {
+                const visibleSps = p.subProjects.filter((sp) => {
                   if (filters.businessContent && (sp.businessContent ?? "") !== filters.businessContent) return false;
                   if (filters.periodStart && (!sp.periodStart || sp.periodStart.slice(0, 10) < filters.periodStart)) return false;
                   if (filters.periodEnd && (!sp.periodEnd || sp.periodEnd.slice(0, 10) > filters.periodEnd)) return false;

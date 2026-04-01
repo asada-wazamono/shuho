@@ -1,8 +1,7 @@
-import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const session = await getSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (session.role !== "admin") return Response.json({ error: "Forbidden" }, { status: 403 });
