@@ -1,7 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { assigneeLoadScore } from "@/lib/loadScore";
-import { DEPARTMENTS, getLoadLabel, type Involvement, type SkillLevel } from "@/lib/constants";
+import { calcSubProjectLoads } from "@/lib/loadScore";
+import { DEPARTMENTS, getLoadLabel, type Involvement } from "@/lib/constants";
 
 type Contributor = {
   subProjectId: string;
@@ -73,7 +73,7 @@ export async function GET() {
     };
   }
 
-  // 部署別 売上集計（SubProjectのdepartmentBudget + 親のoptionalAmount）
+  // 部署別 売上集計（SubProjectのdepartmentBudget のみ）
   // 親案件1件につき子案件の部門予算の合計を売上として集計
   const byDept: Record<string, { sales: number; count: number }> = {};
   for (const d of DEPARTMENTS) byDept[d] = { sales: 0, count: 0 };
@@ -95,23 +95,22 @@ export async function GET() {
     const subBudget = p.subProjects.length > 0
       ? p.subProjects.reduce((s, sp) => s + (sp.departmentBudget ?? 0), 0)
       : (p.departmentBudget ?? 0);
-    const sales = subBudget + (p.optionalAmount ?? 0);
+    const sales = subBudget;
     if (byDept[dept]) {
       byDept[dept].sales += sales;
       byDept[dept].count += 1;
     }
   }
 
-  // 担当者別 負荷集計
+  // 担当者別 負荷集計（チーム構成按分方式）
   for (const sp of subProjects) {
+    const loads = calcSubProjectLoads(
+      sp.assignees.map((a) => ({ userId: a.userId, involvement: a.involvement as Involvement }))
+    );
     for (const a of sp.assignees) {
-      const uid = a.userId;
-      const target = userAgg[uid];
+      const target = userAgg[a.userId];
       if (!target) continue;
-      const score = assigneeLoadScore([{
-        involvement: a.involvement as Involvement,
-        skillLevel: a.skillLevel as SkillLevel,
-      }]);
+      const score = loads[a.userId] ?? 0;
       target.totalLoad += score;
       target.subProjectCount += 1;
       target.contributors.push({

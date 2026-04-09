@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { INVOLVEMENT_OPTIONS, SKILL_LEVEL_OPTIONS } from "@/lib/constants";
+import { INVOLVEMENT_OPTIONS } from "@/lib/constants";
 
 // POST: 子案件に担当者として参加
 export async function POST(
@@ -28,13 +28,9 @@ export async function POST(
 
   const body = await request.json().catch(() => ({}));
   const involvement = (body.involvement as string) ?? "SUB";
-  const skillLevel = Number(body.skillLevel ?? 2);
 
   if (!(INVOLVEMENT_OPTIONS as readonly string[]).includes(involvement)) {
     return Response.json({ error: `関わり度が不正です: ${involvement}` }, { status: 400 });
-  }
-  if (!(SKILL_LEVEL_OPTIONS as readonly number[]).includes(skillLevel as 1 | 2 | 3)) {
-    return Response.json({ error: `スキルレベルが不正です: ${skillLevel}` }, { status: 400 });
   }
 
   await prisma.subProjectAssignee.create({
@@ -42,7 +38,7 @@ export async function POST(
       subProjectId: id,
       userId: session.id,
       involvement,
-      skillLevel,
+      skillLevel: 2,
     },
   });
 

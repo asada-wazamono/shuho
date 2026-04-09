@@ -6,16 +6,12 @@ import Link from "next/link";
 import {
   INVOLVEMENT_OPTIONS,
   INVOLVEMENT_LABELS,
-  SKILL_LEVEL_OPTIONS,
-  SKILL_LEVEL_LABELS,
-  LOAD_MATRIX,
   SUB_PROJECT_BUSINESS_CONTENTS,
   type Involvement,
-  type SkillLevel,
 } from "@/lib/constants";
 
 type User = { id: string; name: string; department: string };
-type AssigneeEntry = { userId: string; involvement: Involvement; skillLevel: SkillLevel };
+type AssigneeEntry = { userId: string; involvement: Involvement };
 
 export default function NewSubProjectPage() {
   const router = useRouter();
@@ -64,7 +60,6 @@ export default function NewSubProjectPage() {
             initial.push({
               userId: a.user.id,
               involvement: "MAIN" as Involvement,
-              skillLevel: 2 as SkillLevel,
             });
           }
         }
@@ -74,7 +69,7 @@ export default function NewSubProjectPage() {
           if (sid && !parentAssigneeIds.has(sid)) {
             setAssignees((prev) => {
               if (prev.some((a) => a.userId === sid)) return prev;
-              return [{ userId: sid, involvement: "MAIN" as Involvement, skillLevel: 2 as SkillLevel }, ...prev];
+              return [{ userId: sid, involvement: "MAIN" as Involvement }, ...prev];
             });
           }
           return sid;
@@ -86,7 +81,7 @@ export default function NewSubProjectPage() {
   function addAssignee() {
     setAssignees((prev) => [
       ...prev,
-      { userId: "", involvement: "MAIN", skillLevel: 2 },
+      { userId: "", involvement: "MAIN" },
     ]);
   }
 
@@ -100,12 +95,6 @@ export default function NewSubProjectPage() {
     );
   }
 
-  // リアルタイムスコア計算
-  const assigneeScores = assignees.map((a) =>
-    a.userId && a.involvement && a.skillLevel
-      ? LOAD_MATRIX[a.involvement]?.[a.skillLevel] ?? 0
-      : 0
-  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -268,77 +257,48 @@ export default function NewSubProjectPage() {
             </p>
           ) : (
             <div className="space-y-3">
-              {assignees.map((a, idx) => {
-                const score = assigneeScores[idx];
-                return (
-                  <div key={idx} className="rounded border border-stone-200 p-3">
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div>
-                        <label className="mb-1 block text-xs text-stone-500">担当者 *</label>
-                        <select
-                          value={a.userId}
-                          onChange={(e) => updateAssignee(idx, "userId", e.target.value)}
-                          className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
-                        >
-                          <option value="">選択</option>
-                          {users.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.department} / {u.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-stone-500">関わり度 *</label>
-                        <select
-                          value={a.involvement}
-                          onChange={(e) => updateAssignee(idx, "involvement", e.target.value as Involvement)}
-                          className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
-                        >
-                          {INVOLVEMENT_OPTIONS.map((inv) => (
-                            <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-stone-500">スキルレベル *</label>
-                        <select
-                          value={a.skillLevel}
-                          onChange={(e) => updateAssignee(idx, "skillLevel", Number(e.target.value) as SkillLevel)}
-                          className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
-                        >
-                          {SKILL_LEVEL_OPTIONS.map((lv) => (
-                            <option key={lv} value={lv}>{SKILL_LEVEL_LABELS[lv]}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-xs text-stone-500">
-                        負荷スコア：
-                        <span className={`font-bold ${score >= 8 ? "text-red-600" : score >= 5 ? "text-amber-600" : "text-emerald-600"}`}>
-                          {score}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeAssignee(idx)}
-                        className="text-xs text-red-500 hover:underline"
+              {assignees.map((a, idx) => (
+                <div key={idx} className="rounded border border-stone-200 p-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-stone-500">担当者 *</label>
+                      <select
+                        value={a.userId}
+                        onChange={(e) => updateAssignee(idx, "userId", e.target.value)}
+                        className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
                       >
-                        削除
-                      </button>
+                        <option value="">選択</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.department} / {u.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-stone-500">関わり度 *</label>
+                      <select
+                        value={a.involvement}
+                        onChange={(e) => updateAssignee(idx, "involvement", e.target.value as Involvement)}
+                        className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
+                      >
+                        {INVOLVEMENT_OPTIONS.map((inv) => (
+                          <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
-                );
-              })}
-              {assignees.length > 0 && (
-                <p className="text-right text-xs text-stone-500">
-                  この子案件の合計負荷スコア：
-                  <span className="font-bold text-stone-800">
-                    {assigneeScores.reduce((s, v) => s + v, 0)}
-                  </span>
-                </p>
-              )}
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => removeAssignee(idx)}
+                      className="text-xs text-red-500 hover:underline"
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

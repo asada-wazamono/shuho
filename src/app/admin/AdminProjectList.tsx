@@ -33,21 +33,38 @@ type Project = {
   status: string;
   ownerDepartment: string;
   updatedAt: string;
-  client: { name: string };
+  client: { id: string; name: string };
   projectType: string;
   businessContent: string;
   totalBudget: number | null;
+  proposalDate: string | null;
   periodStart: string | null;
   proposalStatus: string | null;
   projectStatus: string | null;
   badReason: string | null;
   note: string | null;
+  mergedIntoId: string | null;
   assignees: { user: { name: string; department: string } }[];
   subProjects: SubProject[];
 };
 
 type Tab = "decided" | "proposal" | "bad";
 type SortDir = "asc" | "desc";
+
+type FieldChoice = "source" | "target";
+type MergeChoices = {
+  totalBudget?: FieldChoice;
+  ownerDepartment?: FieldChoice;
+  businessContent?: FieldChoice;
+  projectType?: FieldChoice;
+};
+type MergeState = {
+  sourceId: string;
+  sourceName: string;
+  clientName: string;
+  clientId: string;
+  isDecided: boolean;
+};
 
 type DecidedRow = {
   parentId: string;
@@ -84,6 +101,11 @@ export function AdminProjectList() {
   const [loadError, setLoadError] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [mergeState, setMergeState] = useState<MergeState | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [mergeChoices, setMergeChoices] = useState<MergeChoices>({});
+  const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState("");
   const [filters, setFilters] = useState({
     ownerDepartment: "",
     assignee: "",
@@ -115,6 +137,30 @@ export function AdminProjectList() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [tab]);
+
+  async function handleMerge() {
+    if (!mergeState || !mergeTargetId) return;
+    setMerging(true);
+    setMergeError("");
+    try {
+      const res = await fetch(`/api/admin/projects/${mergeState.sourceId}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intoId: mergeTargetId, choices: mergeChoices }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "統合に失敗しました");
+      const sourceId = mergeState.sourceId;
+      setMergeState(null);
+      setMergeTargetId("");
+      setMergeChoices({});
+      setProjects((prev) => prev.filter((p) => p.id !== sourceId));
+    } catch (err) {
+      setMergeError(err instanceof Error ? err.message : "統合に失敗しました");
+    } finally {
+      setMerging(false);
+    }
+  }
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -229,7 +275,21 @@ export function AdminProjectList() {
 
   const isEmpty = tab === "decided" ? sortedDecidedRows.length === 0 : sortedProjects.length === 0;
 
+  // 決定タブ：親案件ごとに最初の行だけ統合ボタンを表示するためのキーセット
+  const firstDecidedRowKeys = useMemo(() => {
+    const seen = new Set<string>();
+    const keys = new Set<string>();
+    for (const row of sortedDecidedRows) {
+      if (!seen.has(row.parentId)) {
+        seen.add(row.parentId);
+        keys.add(`${row.parentId}-${row.subProject.id}`);
+      }
+    }
+    return keys;
+  }, [sortedDecidedRows]);
+
   return (
+    <>
     <section className="rounded border border-stone-200 bg-white shadow-sm">
       {/* タブ */}
       <div className="flex border-b border-stone-200">
@@ -337,13 +397,20 @@ export function AdminProjectList() {
                 <SortTh k="periodStart"      label="実施期間" {...sortProps} />
                 <th className="p-2">担当者</th>
                 <SortTh k="updatedAt" label="最終更新日" {...sortProps} />
+                <th className="p-2"></th>
               </tr>
             </thead>
             <tbody>
               {sortedDecidedRows.map((row) => {
                 const sp = row.subProject;
+                const rowKey = `${row.parentId}-${sp.id}`;
+                const isFirstRow = firstDecidedRowKeys.has(rowKey);
+                const sourceProject = projects.find((p) => p.id === row.parentId);
+                const sameClientCount = projects.filter(
+                  (p) => p.id !== row.parentId && p.client.id === sourceProject?.client.id && p.status === "good" && !p.mergedIntoId
+                ).length;
                 return (
-                  <tr key={`${row.parentId}-${sp.id}`} className="border-b border-stone-100 hover:bg-stone-50">
+                  <tr key={rowKey} className="border-b border-stone-100 hover:bg-stone-50">
                     <td className="p-2">{row.ownerDepartment}</td>
                     <td className="p-2">{row.clientName}</td>
                     <td className="p-2">
@@ -379,6 +446,22 @@ export function AdminProjectList() {
                       </div>
                     </td>
                     <td className="p-2">{new Date(row.updatedAt).toLocaleDateString("ja")}</td>
+                    <td className="p-2">
+                      {isFirstRow && sameClientCount > 0 && sourceProject && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMergeState({ sourceId: row.parentId, sourceName: row.parentName, clientName: row.clientName, clientId: sourceProject.client.id, isDecided: true });
+                            setMergeTargetId("");
+                            setMergeChoices({});
+                            setMergeError("");
+                          }}
+                          className="rounded border border-stone-300 px-2 py-0.5 text-xs text-stone-600 hover:bg-stone-100"
+                        >
+                          統合
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -396,10 +479,12 @@ export function AdminProjectList() {
                 <SortTh k="name"            label="案件名" {...sortProps} />
                 <SortTh k="businessContent" label="業務内容" {...sortProps} />
                 <th className="p-2">状況</th>
-                <SortTh k="totalBudget"  label="全体予算" {...sortProps} />
-                <SortTh k="periodStart"  label="実施想定日" {...sortProps} />
+                <SortTh k="totalBudget"   label="全体予算" {...sortProps} />
+                <SortTh k="proposalDate"  label="提案日" {...sortProps} />
+                <SortTh k="periodStart"   label="実施想定日" {...sortProps} />
                 <th className="p-2">担当者</th>
                 <SortTh k="updatedAt" label="最終更新日" {...sortProps} />
+                <th className="p-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -408,6 +493,9 @@ export function AdminProjectList() {
                 const statusLabel = p.proposalStatus
                   ? (PROPOSAL_STATUS_LABELS[p.proposalStatus as keyof typeof PROPOSAL_STATUS_LABELS] ?? p.proposalStatus)
                   : "-";
+                const sameClientCount = sortedProjects.filter(
+                  (x) => x.id !== p.id && x.client.id === p.client.id
+                ).length;
                 return (
                   <tr key={p.id} className="border-b border-stone-100 hover:bg-stone-50">
                     <td className="p-2">{p.ownerDepartment}</td>
@@ -418,9 +506,26 @@ export function AdminProjectList() {
                     <td className="p-2">{p.businessContent}</td>
                     <td className="p-2 text-xs">{statusLabel}</td>
                     <td className="p-2">{p.totalBudget != null ? `¥${p.totalBudget.toLocaleString()}` : "-"}</td>
+                    <td className="p-2">{p.proposalDate ? new Date(p.proposalDate).toLocaleDateString("ja") : "-"}</td>
                     <td className="p-2">{p.periodStart ? new Date(p.periodStart).toLocaleDateString("ja") : "-"}</td>
                     <td className="p-2">{assignees || "-"}</td>
                     <td className="p-2">{new Date(p.updatedAt).toLocaleDateString("ja")}</td>
+                    <td className="p-2">
+                      {sameClientCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMergeState({ sourceId: p.id, sourceName: p.name, clientName: p.client.name, clientId: p.client.id, isDecided: false });
+                            setMergeTargetId("");
+                            setMergeChoices({});
+                            setMergeError("");
+                          }}
+                          className="rounded border border-stone-300 px-2 py-0.5 text-xs text-stone-600 hover:bg-stone-100"
+                        >
+                          統合
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -464,5 +569,142 @@ export function AdminProjectList() {
         )}
       </div>
     </section>
+
+      {/* 統合モーダル */}
+      {mergeState && (() => {
+        const sourceProject = projects.find((p) => p.id === mergeState.sourceId);
+        const targetProject = projects.find((p) => p.id === mergeTargetId);
+        const candidateProjects = projects.filter(
+          (p) => p.id !== mergeState.sourceId && p.client.id === mergeState.clientId &&
+          (mergeState.isDecided ? p.status === "good" : p.status === "undecided") && !p.mergedIntoId
+        );
+
+        // 差異があるフィールドを計算
+        type DiffField = { key: keyof MergeChoices; label: string; sourceVal: string; targetVal: string };
+        const diffs: DiffField[] = [];
+        if (mergeState.isDecided && sourceProject && targetProject) {
+          const fmt = (v: number | null | undefined) => v != null ? `¥${v.toLocaleString()}` : "-";
+          if (sourceProject.totalBudget !== targetProject.totalBudget)
+            diffs.push({ key: "totalBudget", label: "全体予算", sourceVal: fmt(sourceProject.totalBudget), targetVal: fmt(targetProject.totalBudget) });
+          if (sourceProject.ownerDepartment !== targetProject.ownerDepartment)
+            diffs.push({ key: "ownerDepartment", label: "担当部署", sourceVal: sourceProject.ownerDepartment, targetVal: targetProject.ownerDepartment });
+          if (sourceProject.businessContent !== targetProject.businessContent)
+            diffs.push({ key: "businessContent", label: "業務内容", sourceVal: sourceProject.businessContent, targetVal: targetProject.businessContent });
+          if (sourceProject.projectType !== targetProject.projectType)
+            diffs.push({ key: "projectType", label: "案件種別", sourceVal: sourceProject.projectType, targetVal: targetProject.projectType });
+        }
+
+        const allChoicesMade = diffs.every((d) => mergeChoices[d.key] !== undefined);
+        const canSubmit = !!mergeTargetId && (!mergeState.isDecided || allChoicesMade);
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setMergeState(null); }}
+          >
+            <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-stone-200 px-6 py-4">
+                <h2 className="text-base font-bold text-stone-800">案件を統合</h2>
+                <button type="button" onClick={() => setMergeState(null)} className="rounded p-1 text-stone-400 hover:bg-stone-100">✕</button>
+              </div>
+              <div className="space-y-4 px-6 py-5">
+                <div className="rounded-lg bg-stone-50 p-3 text-sm">
+                  <p className="text-xs text-stone-500 mb-1">吸収される案件</p>
+                  <p className="font-medium text-stone-800">{mergeState.sourceName}</p>
+                  <p className="text-xs text-stone-500">{mergeState.clientName}</p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-stone-700">統合先（存続する案件）</label>
+                  <select
+                    value={mergeTargetId}
+                    onChange={(e) => { setMergeTargetId(e.target.value); setMergeChoices({}); }}
+                    className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
+                  >
+                    <option value="">選択してください</option>
+                    {candidateProjects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 決定案件：差異フィールドの選択 */}
+                {mergeState.isDecided && targetProject && diffs.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-xs font-medium text-stone-600">項目が異なるため、どちらを使うか選択してください</p>
+                    {diffs.map((d) => (
+                      <div key={d.key} className="rounded-lg border border-stone-200 p-3">
+                        <p className="mb-2 text-xs font-medium text-stone-700">{d.label}</p>
+                        <div className="flex gap-3">
+                          <label className={`flex flex-1 cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs ${mergeChoices[d.key] === "source" ? "border-amber-400 bg-amber-50" : "border-stone-200"}`}>
+                            <input
+                              type="radio"
+                              name={d.key}
+                              value="source"
+                              checked={mergeChoices[d.key] === "source"}
+                              onChange={() => setMergeChoices((c) => ({ ...c, [d.key]: "source" }))}
+                              className="accent-amber-600"
+                            />
+                            <span>
+                              <span className="text-stone-400">吸収側　</span>
+                              <span className="font-medium text-stone-800">{d.sourceVal}</span>
+                            </span>
+                          </label>
+                          <label className={`flex flex-1 cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs ${mergeChoices[d.key] === "target" ? "border-amber-400 bg-amber-50" : "border-stone-200"}`}>
+                            <input
+                              type="radio"
+                              name={d.key}
+                              value="target"
+                              checked={mergeChoices[d.key] === "target"}
+                              onChange={() => setMergeChoices((c) => ({ ...c, [d.key]: "target" }))}
+                              className="accent-amber-600"
+                            />
+                            <span>
+                              <span className="text-stone-400">存続側　</span>
+                              <span className="font-medium text-stone-800">{d.targetVal}</span>
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {mergeState.isDecided && targetProject && diffs.length === 0 && mergeTargetId && (
+                  <p className="text-xs text-stone-500">全項目が一致しています。そのまま統合できます。</p>
+                )}
+                {mergeState.isDecided && mergeTargetId && (
+                  <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                    担当者は自動的にマージされます。子案件はすべて存続側に移動されます。
+                  </p>
+                )}
+                {!mergeState.isDecided && mergeTargetId && (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    「{mergeState.sourceName}」の子案件が統合先へ移動され、この案件は非表示になります。
+                  </p>
+                )}
+
+                {mergeError && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{mergeError}</p>}
+                <div className="flex gap-3 border-t border-stone-200 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleMerge}
+                    disabled={!canSubmit || merging}
+                    className="rounded bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {merging ? "統合中…" : "統合する"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMergeState(null)}
+                    className="rounded border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-50"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </>
   );
 }

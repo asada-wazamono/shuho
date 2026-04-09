@@ -6,12 +6,9 @@ import Link from "next/link";
 import {
   INVOLVEMENT_OPTIONS,
   INVOLVEMENT_LABELS,
-  SKILL_LEVEL_OPTIONS,
-  SKILL_LEVEL_LABELS,
   EXECUTION_STATUS_LABELS,
   SUB_PROJECT_STATUS_LABELS,
   type Involvement,
-  type SkillLevel,
   type ExecutionStatus,
   type SubProjectStatus,
 } from "@/lib/constants";
@@ -41,7 +38,6 @@ type Project = {
 type JoinEntry = {
   subProjectId: string;
   involvement: Involvement;
-  skillLevel: SkillLevel;
 };
 
 type Props = {
@@ -79,7 +75,6 @@ export function ClientModal({ clientId, clientName, sessionUserId, onClose }: Pr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           involvement: joinEntry.involvement,
-          skillLevel: joinEntry.skillLevel,
         }),
       });
       const data = await res.json();
@@ -277,7 +272,6 @@ export function ClientModal({ clientId, clientName, sessionUserId, onClose }: Pr
                                           setJoinEntry({
                                             subProjectId: sp.id,
                                             involvement: "SUB",
-                                            skillLevel: 2,
                                           });
                                         }
                                       }}
@@ -321,33 +315,6 @@ export function ClientModal({ clientId, clientName, sessionUserId, onClose }: Pr
                                           {INVOLVEMENT_OPTIONS.map((inv) => (
                                             <option key={inv} value={inv}>
                                               {INVOLVEMENT_LABELS[inv]}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="mb-0.5 block text-xs text-stone-500">
-                                          スキルレベル
-                                        </label>
-                                        <select
-                                          value={joinEntry!.skillLevel}
-                                          onChange={(e) =>
-                                            setJoinEntry((j) =>
-                                              j
-                                                ? {
-                                                    ...j,
-                                                    skillLevel: Number(
-                                                      e.target.value
-                                                    ) as SkillLevel,
-                                                  }
-                                                : j
-                                            )
-                                          }
-                                          className="rounded border border-stone-300 px-2 py-1 text-xs"
-                                        >
-                                          {SKILL_LEVEL_OPTIONS.map((lv) => (
-                                            <option key={lv} value={lv}>
-                                              {SKILL_LEVEL_LABELS[lv]}
                                             </option>
                                           ))}
                                         </select>

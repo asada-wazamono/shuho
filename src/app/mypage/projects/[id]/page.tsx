@@ -581,7 +581,7 @@ export default function ProjectDetailPage() {
                                 key={a.userId}
                                 className="rounded bg-stone-100 px-2 py-0.5 text-xs text-stone-600"
                               >
-                                {a.user.name}（{INVOLVEMENT_LABELS[a.involvement as keyof typeof INVOLVEMENT_LABELS] ?? a.involvement} / Lv.{a.skillLevel}）
+                                {a.user.name}（{INVOLVEMENT_LABELS[a.involvement as keyof typeof INVOLVEMENT_LABELS] ?? a.involvement}）
                               </span>
                             ))}
                           </div>

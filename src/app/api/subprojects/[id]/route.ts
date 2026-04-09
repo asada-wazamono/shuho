@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { INVOLVEMENT_OPTIONS, SKILL_LEVEL_OPTIONS, SUB_PROJECT_STATUS_OPTIONS } from "@/lib/constants";
+import { INVOLVEMENT_OPTIONS, SUB_PROJECT_STATUS_OPTIONS } from "@/lib/constants";
 
 const SUB_PROJECT_INCLUDE = {
   assignees: {
@@ -96,15 +96,12 @@ export async function PATCH(
 
   // 担当者の差分更新
   if (body.assignees !== undefined) {
-    const assigneeList: { userId: string; involvement: string; skillLevel: number }[] =
+    const assigneeList: { userId: string; involvement: string }[] =
       Array.isArray(body.assignees) ? body.assignees : [];
 
     for (const a of assigneeList) {
       if (!(INVOLVEMENT_OPTIONS as readonly string[]).includes(a.involvement)) {
         return Response.json({ error: `関わり度が不正です: ${a.involvement}` }, { status: 400 });
-      }
-      if (!(SKILL_LEVEL_OPTIONS as readonly number[]).includes(a.skillLevel)) {
-        return Response.json({ error: `スキルレベルが不正です: ${a.skillLevel}` }, { status: 400 });
       }
     }
 
@@ -118,7 +115,7 @@ export async function PATCH(
   try {
     // 担当者を削除して再作成
     if (body.assignees !== undefined) {
-      const assigneeList: { userId: string; involvement: string; skillLevel: number }[] =
+      const assigneeList: { userId: string; involvement: string }[] =
         Array.isArray(body.assignees) ? body.assignees : [];
       await prisma.subProjectAssignee.deleteMany({ where: { subProjectId: id } });
       if (assigneeList.length > 0) {
@@ -127,7 +124,7 @@ export async function PATCH(
             subProjectId: id,
             userId: a.userId,
             involvement: a.involvement,
-            skillLevel: Number(a.skillLevel),
+            skillLevel: 2,
           })),
         });
       }

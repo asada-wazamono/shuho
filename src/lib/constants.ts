@@ -101,12 +101,22 @@ export const SKILL_LEVEL_LABELS: Record<SkillLevel, string> = {
   3: "Lv.3 — 他者をリードできる",
 };
 
-// 負荷スコアマトリクス（関わり度 × スキルLv）
+// 負荷スコアマトリクス（旧方式・後方互換のため残存）
 export const LOAD_MATRIX: Record<Involvement, Record<SkillLevel, number>> = {
   MAIN:   { 1: 10, 2: 7, 3: 5 },
   SUB:    { 1: 6,  2: 4, 3: 3 },
   ADVICE: { 1: 2,  2: 2, 3: 1 },
 };
+
+// 関わり度の重み（新方式：チーム構成按分）
+// 子案件の総負荷(10)を関わり度の重みで按分する
+export const INVOLVEMENT_WEIGHTS: Record<Involvement, number> = {
+  MAIN:   3,
+  SUB:    1,
+  ADVICE: 0.25,
+};
+
+export const PROJECT_BASE_LOAD = 10; // 子案件1件あたりの総負荷ポイント
 
 // 担当者負荷スコア判定基準
 export const LOAD_THRESHOLDS = {

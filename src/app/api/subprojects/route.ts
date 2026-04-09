@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { INVOLVEMENT_OPTIONS, SKILL_LEVEL_OPTIONS } from "@/lib/constants";
+import { INVOLVEMENT_OPTIONS } from "@/lib/constants";
 
 // POST: 子案件の新規登録
 export async function POST(request: NextRequest) {
@@ -41,15 +41,12 @@ export async function POST(request: NextRequest) {
   }
 
   // 担当者バリデーション
-  const assigneeList: { userId: string; involvement: string; skillLevel: number }[] =
+  const assigneeList: { userId: string; involvement: string }[] =
     Array.isArray(assignees) ? assignees : [];
   for (const a of assigneeList) {
     if (!a.userId) return Response.json({ error: "担当者IDが必要です" }, { status: 400 });
     if (!(INVOLVEMENT_OPTIONS as readonly string[]).includes(a.involvement)) {
       return Response.json({ error: `関わり度が不正です: ${a.involvement}` }, { status: 400 });
-    }
-    if (!(SKILL_LEVEL_OPTIONS as readonly number[]).includes(a.skillLevel)) {
-      return Response.json({ error: `スキルレベルが不正です: ${a.skillLevel}` }, { status: 400 });
     }
   }
 
@@ -73,7 +70,7 @@ export async function POST(request: NextRequest) {
           create: assigneeList.map((a) => ({
             userId: a.userId,
             involvement: a.involvement,
-            skillLevel: Number(a.skillLevel),
+            skillLevel: 2,
           })),
         },
       },

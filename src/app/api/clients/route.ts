@@ -14,11 +14,11 @@ export async function GET() {
   return Response.json(clients);
 }
 
-// POST: 新規クライアント（管理者のみ）
+// POST: 新規クライアント（ログイン済みなら誰でも）
 export async function POST(request: NextRequest) {
   const session = await getSession();
-  if (!session || session.role !== "admin") {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
+  if (!session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();

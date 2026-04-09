@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { assigneeLoadScore, } from "@/lib/loadScore";
-import { getLoadLabel, type Involvement, type SkillLevel } from "@/lib/constants";
+import { calcSubProjectLoads } from "@/lib/loadScore";
+import { getLoadLabel, type Involvement } from "@/lib/constants";
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 const DOMAIN_SQL_RULES = `【用語ルール（厳守）】
@@ -227,13 +227,13 @@ async function computeLoadSummary(targetMonth?: TargetMonth) {
   }
 
   for (const sp of subProjects) {
+    const loads = calcSubProjectLoads(
+      sp.assignees.map((a) => ({ userId: a.userId, involvement: a.involvement as Involvement }))
+    );
     for (const a of sp.assignees) {
       const target = userAgg[a.userId];
       if (!target) continue;
-      const score = assigneeLoadScore([{
-        involvement: a.involvement as Involvement,
-        skillLevel: a.skillLevel as SkillLevel,
-      }]);
+      const score = loads[a.userId] ?? 0;
       target.totalLoad += score;
       target.subProjectCount += 1;
       target.assignments.push({

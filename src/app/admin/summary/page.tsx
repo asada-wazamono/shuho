@@ -183,7 +183,7 @@ export default function AdminSummaryPage() {
             <p className="text-2xl font-bold">{data.totalCount} 件</p>
           </div>
           <div>
-            <p className="text-xs text-stone-500">決定売上合計（子案件部門予算＋任意額）</p>
+            <p className="text-xs text-stone-500">決定売上合計（子案件部門予算）</p>
             <p className="text-2xl font-bold">¥{data.totalSales.toLocaleString()}</p>
           </div>
         </div>
@@ -361,7 +361,7 @@ export default function AdminSummaryPage() {
                           {u.topContributors.map((c) => (
                             <div key={`${u.userId}-${c.subProjectId}`} className="flex flex-wrap items-center gap-1">
                               <span className="rounded bg-stone-100 px-1.5 py-0.5 text-stone-600">
-                                {INVOLVEMENT_LABELS[c.involvement as Involvement] ?? c.involvement}/Lv.{c.skillLevel}
+                                {INVOLVEMENT_LABELS[c.involvement as Involvement] ?? c.involvement}
                               </span>
                               <span className="text-stone-600">
                                 {c.parentProjectName}
