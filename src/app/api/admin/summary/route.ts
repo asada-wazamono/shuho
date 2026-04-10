@@ -1,6 +1,6 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { calcSubProjectLoads } from "@/lib/loadScore";
+import { calcSubProjectLoads, calcProposalLoad } from "@/lib/loadScore";
 import { DEPARTMENTS, getLoadLabel, type Involvement } from "@/lib/constants";
 
 type Contributor = {
@@ -16,7 +16,9 @@ type UserAggregate = {
   userId: string;
   name: string;
   department: string;
-  totalLoad: number;
+  decidedLoad: number;
+  proposalLoad: number;
+  proposalCount: number;
   subProjectCount: number;
   contributors: Contributor[];
 };
@@ -69,7 +71,7 @@ export async function GET() {
   for (const u of users) {
     userAgg[u.id] = {
       userId: u.id, name: u.name, department: u.department,
-      totalLoad: 0, subProjectCount: 0, contributors: [],
+      decidedLoad: 0, proposalLoad: 0, proposalCount: 0, subProjectCount: 0, contributors: [],
     };
   }
 
@@ -102,7 +104,7 @@ export async function GET() {
     }
   }
 
-  // 担当者別 負荷集計（チーム構成按分方式）
+  // 担当者別 決定案件負荷集計（チーム構成按分方式）
   for (const sp of subProjects) {
     const loads = calcSubProjectLoads(
       sp.assignees.map((a) => ({ userId: a.userId, involvement: a.involvement as Involvement }))
@@ -111,7 +113,7 @@ export async function GET() {
       const target = userAgg[a.userId];
       if (!target) continue;
       const score = loads[a.userId] ?? 0;
-      target.totalLoad += score;
+      target.decidedLoad += score;
       target.subProjectCount += 1;
       target.contributors.push({
         subProjectId: sp.id,
@@ -124,23 +126,52 @@ export async function GET() {
     }
   }
 
+  // 提案案件の負荷集計
+  const proposalProjects = await prisma.project.findMany({
+    where: { status: "undecided", mergedIntoId: null },
+    select: {
+      id: true,
+      projectType: true,
+      assignees: { select: { userId: true, involvement: true } },
+    },
+  });
+
+  for (const p of proposalProjects) {
+    const loads = calcProposalLoad(
+      p.assignees.map((a) => ({ userId: a.userId, involvement: a.involvement as Involvement })),
+      p.projectType
+    );
+    for (const a of p.assignees) {
+      const target = userAgg[a.userId];
+      if (!target) continue;
+      target.proposalLoad += loads[a.userId] ?? 0;
+      target.proposalCount += 1;
+    }
+  }
+
   const totalSales = Object.values(byDept).reduce((s, d) => s + d.sales, 0);
 
   // baseRows 生成
   const baseRows = users
     .map((u) => {
       const agg = userAgg[u.id];
+      const decidedLoad = Math.round(agg.decidedLoad * 10) / 10;
+      const proposalLoad = Math.round(agg.proposalLoad * 10) / 10;
+      const totalLoad = Math.round((decidedLoad + proposalLoad) * 10) / 10;
       return {
         userId: u.id,
         name: u.name,
         department: u.department,
-        totalLoad: agg.totalLoad,
+        decidedLoad,
+        proposalLoad,
+        proposalCount: agg.proposalCount,
+        totalLoad,
         subProjectCount: agg.subProjectCount,
-        absoluteLabel: getLoadLabel(agg.totalLoad),
+        absoluteLabel: getLoadLabel(totalLoad),
         topContributors: agg.contributors
           .sort((a, b) => b.contribution - a.contribution)
           .slice(0, 3),
-        score: agg.totalLoad,
+        score: totalLoad,
       };
     })
     .sort((a, b) => b.totalLoad - a.totalLoad);
@@ -191,6 +222,9 @@ export async function GET() {
     userId: r.userId,
     name: r.name,
     department: r.department,
+    decidedLoad: r.decidedLoad,
+    proposalLoad: r.proposalLoad,
+    proposalCount: r.proposalCount,
     totalLoad: r.totalLoad,
     absoluteLabel: r.absoluteLabel,
     subProjectCount: r.subProjectCount,

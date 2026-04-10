@@ -141,6 +141,7 @@ model ProjectAssignee {
   id            String  @id @default(cuid())
   projectId     String
   userId        String
+  involvement   String  @default("SUB") // MAIN(高) | SUB(中) | ADVICE(低)
   // 旧3軸負荷レベル（既存データ保持のためnullable化。新規案件は SubProjectAssignee で管理）
   businessLevel Int?    // 1-5 業務レベル（担当者別）
   workloadLevel Int?    // 1-5 稼働負荷レベル（担当者別）

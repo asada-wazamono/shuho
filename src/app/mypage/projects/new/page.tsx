@@ -9,6 +9,9 @@ import {
   DEPARTMENTS,
   PROPOSAL_STATUS_OPTIONS,
   PROPOSAL_STATUS_LABELS,
+  INVOLVEMENT_OPTIONS,
+  INVOLVEMENT_LABELS,
+  type Involvement,
 } from "@/lib/constants";
 
 type Client = { id: string; name: string };
@@ -39,6 +42,7 @@ export default function NewProjectPage() {
   const [showExistingModal, setShowExistingModal] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
 
+  type AssigneeEntry = { userId: string; involvement: Involvement };
   const [form, setForm] = useState({
     clientId: "",
     name: "",
@@ -47,7 +51,7 @@ export default function NewProjectPage() {
     certainty: "A(70%)",
     businessContent: "",
     ownerDepartment: "",
-    assigneeIds: [] as string[],
+    assignees: [] as AssigneeEntry[],
     totalBudget: "",
     proposalDate: "",
     periodStart: "",  // 年月日で入力（日不明時は1日）
@@ -78,7 +82,9 @@ export default function NewProjectPage() {
     if (!sessionUserId) return;
     setForm((f) => ({
       ...f,
-      assigneeIds: Array.from(new Set([...f.assigneeIds, sessionUserId])),
+      assignees: f.assignees.some((a) => a.userId === sessionUserId)
+        ? f.assignees
+        : [...f.assignees, { userId: sessionUserId, involvement: "MAIN" as Involvement }],
       ownerDepartment: f.ownerDepartment || sessionDept,
     }));
   }, [sessionUserId, sessionDept]);
@@ -148,6 +154,7 @@ export default function NewProjectPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
+        assignees: form.assignees,
         totalBudget: Number(form.totalBudget),
         proposalDate: form.proposalDate || null,
         // 日付が入力されていれば使用。入力が年月のみの場合は1日を補完
@@ -295,32 +302,53 @@ export default function NewProjectPage() {
         <div>
           <label className="mb-1 block text-sm font-medium text-stone-700">担当者 *</label>
           <div className="rounded border border-stone-300 bg-white p-3">
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-2">
               {users.map((u) => {
                 const isSelf = sessionUserId === u.id;
+                const entry = form.assignees.find((a) => a.userId === u.id);
+                const checked = !!entry;
                 return (
-                  <label key={u.id} className="flex items-center gap-2 text-sm">
+                  <div key={u.id} className="flex items-center gap-3 text-sm">
                     <input
                       type="checkbox"
-                      checked={form.assigneeIds.includes(u.id)}
+                      checked={checked}
                       disabled={isSelf}
                       onChange={(e) => {
                         setForm((f) => {
-                          const next = new Set(f.assigneeIds);
-                          if (e.target.checked) next.add(u.id);
-                          else next.delete(u.id);
-                          return { ...f, assigneeIds: Array.from(next) };
+                          if (e.target.checked) {
+                            return { ...f, assignees: [...f.assignees, { userId: u.id, involvement: "SUB" as Involvement }] };
+                          } else {
+                            return { ...f, assignees: f.assignees.filter((a) => a.userId !== u.id) };
+                          }
                         });
                       }}
                     />
-                    <span>{u.department} / {u.name}</span>
-                  </label>
+                    <span className="w-36 shrink-0">{u.department} / {u.name}</span>
+                    {checked && (
+                      <select
+                        value={entry.involvement}
+                        onChange={(e) => {
+                          setForm((f) => ({
+                            ...f,
+                            assignees: f.assignees.map((a) =>
+                              a.userId === u.id ? { ...a, involvement: e.target.value as Involvement } : a
+                            ),
+                          }));
+                        }}
+                        className="rounded border border-stone-300 px-2 py-0.5 text-xs"
+                      >
+                        {INVOLVEMENT_OPTIONS.map((inv) => (
+                          <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                 );
               })}
             </div>
           </div>
           <p className="mt-1 text-xs text-stone-500">
-            自分は固定で担当者に含まれます（外せません）。
+            自分は固定で担当者に含まれます（外せません）。関わり度：高=メイン、中=サブ、低=アドバイス
           </p>
         </div>
 

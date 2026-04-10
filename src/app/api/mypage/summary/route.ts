@@ -1,6 +1,6 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { calcSubProjectLoads } from "@/lib/loadScore";
+import { calcSubProjectLoads, calcProposalLoad } from "@/lib/loadScore";
 import { getLoadLabel, type Involvement } from "@/lib/constants";
 
 // 部員マイページ用サマリー：決定売上・自分の負荷スコア・負荷判定
@@ -25,23 +25,63 @@ export async function GET() {
   });
 
   // チーム構成按分で自分のスコアを計算
-  let loadScore = 0;
+  let decidedLoad = 0;
   let decidedSales = 0;
 
   for (const sp of mySubProjects) {
     const loads = calcSubProjectLoads(
       sp.assignees.map((a) => ({ userId: a.userId, involvement: a.involvement as Involvement }))
     );
-    loadScore += loads[session.id] ?? 0;
+    decidedLoad += loads[session.id] ?? 0;
     decidedSales += sp.departmentBudget ?? 0;
   }
+
+  // 提案案件の負荷計算（自分が担当者の undecided 案件）
+  const myProposalProjects = await prisma.project.findMany({
+    where: {
+      status: "undecided",
+      mergedIntoId: null,
+      assignees: { some: { userId: session.id } },
+    },
+    select: {
+      id: true,
+      projectType: true,
+      totalBudget: true,
+      assignees: {
+        select: { userId: true, involvement: true },
+      },
+    },
+  });
+
+  let proposalLoad = 0;
+  let proposalBudget = 0;
+  const proposalCount = myProposalProjects.length;
+
+  for (const p of myProposalProjects) {
+    const loads = calcProposalLoad(
+      p.assignees.map((a) => ({ userId: a.userId, involvement: a.involvement as Involvement })),
+      p.projectType
+    );
+    proposalLoad += loads[session.id] ?? 0;
+    proposalBudget += p.totalBudget ?? 0;
+  }
+
+  decidedLoad = Math.round(decidedLoad * 10) / 10;
+  proposalLoad = Math.round(proposalLoad * 10) / 10;
+  const totalLoad = Math.round((decidedLoad + proposalLoad) * 10) / 10;
 
   return Response.json({
     department: session.department,
     name: session.name,
     decidedSales,
     optionalTotal: 0,
-    loadScore: Math.round(loadScore * 10) / 10,
-    loadLabel: getLoadLabel(loadScore),
+    decidedLoad,
+    proposalLoad,
+    totalLoad,
+    loadLabel: getLoadLabel(totalLoad),
+    proposalBudget,
+    proposalCount,
+    // 後方互換
+    loadScore: totalLoad,
   });
 }

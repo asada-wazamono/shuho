@@ -88,6 +88,7 @@ export async function POST(request: NextRequest) {
     businessContent,
     ownerDepartment,
     assigneeIds,
+    assignees: assigneesInput,
     totalBudget,
     proposalDate,
     periodStart,
@@ -119,10 +120,19 @@ export async function POST(request: NextRequest) {
   if (projectType === "競合コンペ") certaintyVal = "C(30%)";
 
   // 担当者の確定（ログインユーザーを必ず含む）
-  const assigneesInput = Array.isArray(assigneeIds) ? assigneeIds.filter(Boolean) : [];
-  const assigneeSet = new Set<string>(assigneesInput);
-  assigneeSet.add(session.id);
-  const finalAssigneeIds = Array.from(assigneeSet);
+  // assignees: [{userId, involvement}] 形式 or assigneeIds: string[] 形式をサポート
+  const involvementMap = new Map<string, string>();
+  if (Array.isArray(assigneesInput) && assigneesInput.length > 0) {
+    for (const a of assigneesInput as { userId: string; involvement?: string }[]) {
+      if (a.userId) involvementMap.set(a.userId, a.involvement || "SUB");
+    }
+  } else {
+    const ids = Array.isArray(assigneeIds) ? assigneeIds.filter(Boolean) : [];
+    for (const uid of ids as string[]) involvementMap.set(uid, "SUB");
+  }
+  // 自分を必ず含む（既に含まれていなければ SUB で追加）
+  if (!involvementMap.has(session.id)) involvementMap.set(session.id, "SUB");
+  const finalAssigneeIds = Array.from(involvementMap.keys());
 
   const existingUsers = await prisma.user.findMany({
     where: { id: { in: finalAssigneeIds } },
@@ -151,7 +161,7 @@ export async function POST(request: NextRequest) {
       statusUpdatedAt: new Date(),
       ownerDepartment,
       assignees: {
-        create: finalAssigneeIds.map((id: string) => ({ userId: id })),
+        create: finalAssigneeIds.map((uid: string) => ({ userId: uid, involvement: involvementMap.get(uid) ?? "SUB" })),
       },
     },
     include: {

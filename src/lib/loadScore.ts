@@ -1,4 +1,4 @@
-import { INVOLVEMENT_WEIGHTS, PROJECT_BASE_LOAD, type Involvement } from "./constants";
+import { INVOLVEMENT_WEIGHTS, PROJECT_BASE_LOAD, PROPOSAL_BASE_LOADS, type Involvement } from "./constants";
 
 /**
  * 子案件のチーム構成に基づき、各担当者の負荷スコアを按分して返す。
@@ -23,6 +23,30 @@ export function calcSubProjectLoads(
   for (const a of assignees) {
     result[a.userId] =
       Math.round((INVOLVEMENT_WEIGHTS[a.involvement] / totalWeight) * PROJECT_BASE_LOAD * 10) / 10;
+  }
+  return result;
+}
+
+/**
+ * 提案案件の担当者ごとの負荷スコアを返す。
+ * 種別ごとの基本負荷(PROPOSAL_BASE_LOADS)を関わり度の重みで按分する。
+ *
+ * @returns userId → 負荷スコア のマップ
+ */
+export function calcProposalLoad(
+  assignees: { userId: string; involvement: Involvement }[],
+  projectType: string
+): Record<string, number> {
+  const baseLoad = PROPOSAL_BASE_LOADS[projectType] ?? 1;
+  const totalWeight = assignees.reduce(
+    (sum, a) => sum + INVOLVEMENT_WEIGHTS[a.involvement],
+    0
+  );
+  if (totalWeight === 0) return {};
+  const result: Record<string, number> = {};
+  for (const a of assignees) {
+    result[a.userId] =
+      Math.round((INVOLVEMENT_WEIGHTS[a.involvement] / totalWeight) * baseLoad * 10) / 10;
   }
   return result;
 }

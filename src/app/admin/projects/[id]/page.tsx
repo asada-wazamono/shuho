@@ -14,8 +14,10 @@ import {
   PROJECT_TYPES,
   SUB_PROJECT_STATUS_LABELS,
   INVOLVEMENT_LABELS,
+  INVOLVEMENT_OPTIONS,
   type ExecutionStatus,
   type SubProjectStatus,
+  type Involvement,
 } from "@/lib/constants";
 
 type SubProjectAssignee = {
@@ -54,7 +56,7 @@ type Project = {
   projectStatus: string | null;
   badReason: string | null;
   statusUpdatedAt: string | null;
-  assignees: { user: { id: string; name: string; department: string } }[];
+  assignees: { userId: string; involvement: string; user: { id: string; name: string; department: string } }[];
   subProjects: SubProject[];
 };
 
@@ -69,6 +71,7 @@ export default function AdminProjectDetailPage() {
   const [users, setUsers] = useState<{ id: string; name: string; department: string }[]>([]);
   const [assigneesTouched, setAssigneesTouched] = useState(false);
 
+  type AssigneeEntry = { userId: string; involvement: Involvement };
   const [form, setForm] = useState({
     status: "undecided",
     certainty: "B(50%)",
@@ -84,7 +87,7 @@ export default function AdminProjectDetailPage() {
     proposalStatus: "preparing",
     projectStatus: "active",
     badReason: "",
-    assigneeIds: [] as string[],
+    assignees: [] as AssigneeEntry[],
   });
 
   function loadProject(data: Project) {
@@ -104,7 +107,7 @@ export default function AdminProjectDetailPage() {
       proposalStatus: data.proposalStatus ?? "preparing",
       projectStatus: data.projectStatus ?? "active",
       badReason: data.badReason ?? "",
-      assigneeIds: data.assignees?.map((a) => a.user.id) ?? [],
+      assignees: data.assignees?.map((a) => ({ userId: a.userId, involvement: (a.involvement || "SUB") as Involvement })) ?? [],
     });
   }
 
@@ -147,7 +150,7 @@ export default function AdminProjectDetailPage() {
       projectStatus: form.status === "good" ? form.projectStatus : undefined,
       badReason: form.status === "bad" ? form.badReason : undefined,
     };
-    if (assigneesTouched) payload.assigneeIds = form.assigneeIds;
+    if (assigneesTouched) payload.assignees = form.assignees;
 
     try {
       const res = await fetch(`/api/projects/${id}`, {
@@ -249,25 +252,49 @@ export default function AdminProjectDetailPage() {
             <div>
               <label className="mb-1 block text-sm font-medium text-stone-700">担当者</label>
               <div className="rounded border border-stone-300 bg-white p-3">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {users.map((u) => (
-                    <label key={u.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={form.assigneeIds.includes(u.id)}
-                        onChange={(e) => {
-                          setAssigneesTouched(true);
-                          setForm((f) => {
-                            const next = new Set(f.assigneeIds);
-                            if (e.target.checked) next.add(u.id);
-                            else next.delete(u.id);
-                            return { ...f, assigneeIds: Array.from(next) };
-                          });
-                        }}
-                      />
-                      <span>{u.department} / {u.name}</span>
-                    </label>
-                  ))}
+                <div className="space-y-2">
+                  {users.map((u) => {
+                    const entry = form.assignees.find((a) => a.userId === u.id);
+                    const checked = !!entry;
+                    return (
+                      <div key={u.id} className="flex items-center gap-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setAssigneesTouched(true);
+                            setForm((f) => {
+                              if (e.target.checked) {
+                                return { ...f, assignees: [...f.assignees, { userId: u.id, involvement: "SUB" as Involvement }] };
+                              } else {
+                                return { ...f, assignees: f.assignees.filter((a) => a.userId !== u.id) };
+                              }
+                            });
+                          }}
+                        />
+                        <span className="w-36 shrink-0">{u.department} / {u.name}</span>
+                        {checked && (
+                          <select
+                            value={entry.involvement}
+                            onChange={(e) => {
+                              setAssigneesTouched(true);
+                              setForm((f) => ({
+                                ...f,
+                                assignees: f.assignees.map((a) =>
+                                  a.userId === u.id ? { ...a, involvement: e.target.value as Involvement } : a
+                                ),
+                              }));
+                            }}
+                            className="rounded border border-stone-300 px-2 py-0.5 text-xs"
+                          >
+                            {INVOLVEMENT_OPTIONS.map((inv) => (
+                              <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -438,25 +465,49 @@ export default function AdminProjectDetailPage() {
             <div>
               <label className="mb-1 block text-sm font-medium text-stone-700">担当者</label>
               <div className="rounded border border-stone-300 bg-white p-3">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {users.map((u) => (
-                    <label key={u.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={form.assigneeIds.includes(u.id)}
-                        onChange={(e) => {
-                          setAssigneesTouched(true);
-                          setForm((f) => {
-                            const next = new Set(f.assigneeIds);
-                            if (e.target.checked) next.add(u.id);
-                            else next.delete(u.id);
-                            return { ...f, assigneeIds: Array.from(next) };
-                          });
-                        }}
-                      />
-                      <span>{u.department} / {u.name}</span>
-                    </label>
-                  ))}
+                <div className="space-y-2">
+                  {users.map((u) => {
+                    const entry = form.assignees.find((a) => a.userId === u.id);
+                    const checked = !!entry;
+                    return (
+                      <div key={u.id} className="flex items-center gap-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setAssigneesTouched(true);
+                            setForm((f) => {
+                              if (e.target.checked) {
+                                return { ...f, assignees: [...f.assignees, { userId: u.id, involvement: "SUB" as Involvement }] };
+                              } else {
+                                return { ...f, assignees: f.assignees.filter((a) => a.userId !== u.id) };
+                              }
+                            });
+                          }}
+                        />
+                        <span className="w-36 shrink-0">{u.department} / {u.name}</span>
+                        {checked && (
+                          <select
+                            value={entry.involvement}
+                            onChange={(e) => {
+                              setAssigneesTouched(true);
+                              setForm((f) => ({
+                                ...f,
+                                assignees: f.assignees.map((a) =>
+                                  a.userId === u.id ? { ...a, involvement: e.target.value as Involvement } : a
+                                ),
+                              }));
+                            }}
+                            className="rounded border border-stone-300 px-2 py-0.5 text-xs"
+                          >
+                            {INVOLVEMENT_OPTIONS.map((inv) => (
+                              <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>

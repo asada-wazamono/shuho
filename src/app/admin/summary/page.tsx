@@ -16,6 +16,9 @@ type AssigneeRow = {
   userId: string;
   name: string;
   department: string;
+  decidedLoad: number;
+  proposalLoad: number;
+  proposalCount: number;
   totalLoad: number;
   absoluteLabel: string;
   subProjectCount: number;
@@ -33,7 +36,7 @@ type Summary = {
   assigneeRanking: AssigneeRow[];
 };
 
-type SortKey = "name" | "department" | "totalLoad" | "deptRank" | "companyRank" | "subProjectCount";
+type SortKey = "name" | "department" | "decidedLoad" | "proposalLoad" | "totalLoad" | "deptRank" | "companyRank" | "subProjectCount";
 type SortDir = "asc" | "desc";
 
 function SortBtn({
@@ -309,12 +312,14 @@ export default function AdminSummaryPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px] text-left text-sm">
+          <table className="w-full min-w-[900px] text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 text-stone-600">
                 <th className="p-2"><SortBtn col="name" label="氏名" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} /></th>
                 <th className="p-2"><SortBtn col="department" label="部署" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} /></th>
-                <th className="p-2"><SortBtn col="totalLoad" label="負荷スコア" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} /></th>
+                <th className="p-2"><SortBtn col="decidedLoad" label="決定負荷" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} /></th>
+                <th className="p-2"><SortBtn col="proposalLoad" label="提案負荷" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} /></th>
+                <th className="p-2"><SortBtn col="totalLoad" label="合計負荷" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} /></th>
                 <th className="p-2">判定</th>
                 <th className="p-2">負荷バー</th>
                 <th className="p-2"><SortBtn col="deptRank" label="部署内順位" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} /></th>
@@ -326,13 +331,15 @@ export default function AdminSummaryPage() {
             <tbody>
               {filteredAndSorted.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-4 text-center text-stone-500">該当するデータがありません</td>
+                  <td colSpan={11} className="p-4 text-center text-stone-500">該当するデータがありません</td>
                 </tr>
               ) : (
                 filteredAndSorted.map((u) => (
                   <tr key={u.userId} className="border-b border-stone-100">
                     <td className="p-2">{u.name}</td>
                     <td className="p-2">{u.department}</td>
+                    <td className="p-2 text-stone-600">{u.decidedLoad.toFixed(1)}</td>
+                    <td className="p-2 text-stone-400">{u.proposalLoad.toFixed(1)}</td>
                     <td className="p-2 font-semibold">{u.totalLoad.toFixed(1)}</td>
                     <td className="p-2">
                       <span className={

@@ -86,9 +86,9 @@ export const INVOLVEMENT_OPTIONS = ["MAIN", "SUB", "ADVICE"] as const;
 export type Involvement = (typeof INVOLVEMENT_OPTIONS)[number];
 
 export const INVOLVEMENT_LABELS: Record<Involvement, string> = {
-  MAIN:   "メイン",
-  SUB:    "サブ",
-  ADVICE: "アドバイス",
+  MAIN:   "高",
+  SUB:    "中",
+  ADVICE: "低",
 };
 
 // 軸② スキルレベル（案件単位で入力）
@@ -117,6 +117,13 @@ export const INVOLVEMENT_WEIGHTS: Record<Involvement, number> = {
 };
 
 export const PROJECT_BASE_LOAD = 10; // 子案件1件あたりの総負荷ポイント
+
+// 提案案件の種別ごとの基本負荷ポイント（競合コンペ=3, AE提案=1, 自主提案=1.5）
+export const PROPOSAL_BASE_LOADS: Record<string, number> = {
+  "競合コンペ": 3,
+  "AE提案":    1,
+  "自主提案":  1.5,
+};
 
 // 担当者負荷スコア判定基準
 export const LOAD_THRESHOLDS = {

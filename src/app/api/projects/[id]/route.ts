@@ -112,12 +112,20 @@ export async function PATCH(
     if (body[key] !== undefined) data[key] = body[key] ? new Date(body[key]) : null;
   }
 
-  // 担当者の差分更新
-  if (body.assigneeIds !== undefined) {
-    const input = Array.isArray(body.assigneeIds) ? body.assigneeIds.filter(Boolean) : [];
-    const assigneeSet = new Set<string>(input);
-    assigneeSet.add(session.id);
-    const finalAssigneeIds = Array.from(assigneeSet);
+  // 担当者の差分更新（assignees: [{userId,involvement}] or assigneeIds: string[] をサポート）
+  if (body.assignees !== undefined || body.assigneeIds !== undefined) {
+    const involvementMap = new Map<string, string>();
+    if (body.assignees !== undefined) {
+      const arr = Array.isArray(body.assignees) ? body.assignees : [];
+      for (const a of arr as { userId: string; involvement?: string }[]) {
+        if (a.userId) involvementMap.set(a.userId, a.involvement || "SUB");
+      }
+    } else {
+      const input = Array.isArray(body.assigneeIds) ? body.assigneeIds.filter(Boolean) : [];
+      for (const uid of input as string[]) involvementMap.set(uid, "SUB");
+    }
+    if (!involvementMap.has(session.id)) involvementMap.set(session.id, "SUB");
+    const finalAssigneeIds = Array.from(involvementMap.keys());
     if (finalAssigneeIds.length === 0) {
       return Response.json({ error: "担当者を1人以上選択してください" }, { status: 400 });
     }
@@ -139,9 +147,15 @@ export async function PATCH(
       });
     }
     for (const userId of finalAssigneeIds) {
-      const exists = existingUserIds.includes(userId);
-      if (!exists) {
-        await prisma.projectAssignee.create({ data: { projectId: id, userId } });
+      const involvement = involvementMap.get(userId) ?? "SUB";
+      if (existingUserIds.includes(userId)) {
+        // 既存レコードの involvement を更新
+        await prisma.projectAssignee.updateMany({
+          where: { projectId: id, userId },
+          data: { involvement },
+        });
+      } else {
+        await prisma.projectAssignee.create({ data: { projectId: id, userId, involvement } });
       }
     }
   }
