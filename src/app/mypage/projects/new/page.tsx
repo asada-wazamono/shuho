@@ -384,10 +384,13 @@ export default function NewProjectPage() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-stone-700">提案日</label>
+            <label className="mb-1 block text-sm font-medium text-stone-700">
+              提案日<span className="ml-1 text-red-500">*</span>
+            </label>
             <input
               type="date"
               {...r("proposalDate")}
+              required
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
           </div>
