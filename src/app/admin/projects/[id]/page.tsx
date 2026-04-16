@@ -274,23 +274,26 @@ export default function AdminProjectDetailPage() {
                         />
                         <span className="w-36 shrink-0">{u.department} / {u.name}</span>
                         {checked && (
-                          <select
-                            value={entry.involvement}
-                            onChange={(e) => {
-                              setAssigneesTouched(true);
-                              setForm((f) => ({
-                                ...f,
-                                assignees: f.assignees.map((a) =>
-                                  a.userId === u.id ? { ...a, involvement: e.target.value as Involvement } : a
-                                ),
-                              }));
-                            }}
-                            className="rounded border border-stone-300 px-2 py-0.5 text-xs"
-                          >
-                            {INVOLVEMENT_OPTIONS.map((inv) => (
-                              <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
-                            ))}
-                          </select>
+                          <label className="flex items-center gap-1 text-xs text-stone-500">
+                            関わり度：
+                            <select
+                              value={entry.involvement}
+                              onChange={(e) => {
+                                setAssigneesTouched(true);
+                                setForm((f) => ({
+                                  ...f,
+                                  assignees: f.assignees.map((a) =>
+                                    a.userId === u.id ? { ...a, involvement: e.target.value as Involvement } : a
+                                  ),
+                                }));
+                              }}
+                              className="rounded border border-stone-300 px-2 py-0.5 text-xs"
+                            >
+                              {INVOLVEMENT_OPTIONS.map((inv) => (
+                                <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
+                              ))}
+                            </select>
+                          </label>
                         )}
                       </div>
                     );
@@ -487,23 +490,26 @@ export default function AdminProjectDetailPage() {
                         />
                         <span className="w-36 shrink-0">{u.department} / {u.name}</span>
                         {checked && (
-                          <select
-                            value={entry.involvement}
-                            onChange={(e) => {
-                              setAssigneesTouched(true);
-                              setForm((f) => ({
-                                ...f,
-                                assignees: f.assignees.map((a) =>
-                                  a.userId === u.id ? { ...a, involvement: e.target.value as Involvement } : a
-                                ),
-                              }));
-                            }}
-                            className="rounded border border-stone-300 px-2 py-0.5 text-xs"
-                          >
-                            {INVOLVEMENT_OPTIONS.map((inv) => (
-                              <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
-                            ))}
-                          </select>
+                          <label className="flex items-center gap-1 text-xs text-stone-500">
+                            関わり度：
+                            <select
+                              value={entry.involvement}
+                              onChange={(e) => {
+                                setAssigneesTouched(true);
+                                setForm((f) => ({
+                                  ...f,
+                                  assignees: f.assignees.map((a) =>
+                                    a.userId === u.id ? { ...a, involvement: e.target.value as Involvement } : a
+                                  ),
+                                }));
+                              }}
+                              className="rounded border border-stone-300 px-2 py-0.5 text-xs"
+                            >
+                              {INVOLVEMENT_OPTIONS.map((inv) => (
+                                <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
+                              ))}
+                            </select>
+                          </label>
                         )}
                       </div>
                     );

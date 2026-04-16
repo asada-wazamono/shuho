@@ -118,11 +118,11 @@ export const INVOLVEMENT_WEIGHTS: Record<Involvement, number> = {
 
 export const PROJECT_BASE_LOAD = 10; // 子案件1件あたりの総負荷ポイント
 
-// 提案案件の種別ごとの基本負荷ポイント（競合コンペ=3, AE提案=1, 自主提案=1.5）
+// 提案案件の種別ごとの基本負荷ポイント（競合コンペ=5, AE提案=1, 自主提案=1）
 export const PROPOSAL_BASE_LOADS: Record<string, number> = {
-  "競合コンペ": 3,
+  "競合コンペ": 5,
   "AE提案":    1,
-  "自主提案":  1.5,
+  "自主提案":  1,
 };
 
 // 担当者負荷スコア判定基準

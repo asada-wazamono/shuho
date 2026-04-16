@@ -3,13 +3,23 @@ import { prisma } from "@/lib/prisma";
 import { calcSubProjectLoads, calcProposalLoad } from "@/lib/loadScore";
 import { DEPARTMENTS, getLoadLabel, type Involvement } from "@/lib/constants";
 
-type Contributor = {
+export type DecidedEntry = {
   subProjectId: string;
   subProjectName: string;
   parentProjectName: string;
   involvement: string;
-  skillLevel: number;
-  contribution: number;
+  load: number;
+  departmentBudget: number | null;
+};
+
+export type ProposalEntry = {
+  projectId: string;
+  projectName: string;
+  clientName: string;
+  projectType: string;
+  involvement: string;
+  load: number;
+  totalBudget: number | null;
 };
 
 type UserAggregate = {
@@ -17,10 +27,13 @@ type UserAggregate = {
   name: string;
   department: string;
   decidedLoad: number;
+  decidedBudget: number;
   proposalLoad: number;
+  proposalBudget: number;
   proposalCount: number;
   subProjectCount: number;
-  contributors: Contributor[];
+  decidedEntries: DecidedEntry[];
+  proposalEntries: ProposalEntry[];
 };
 
 function rankWithTies<T extends { score: number }>(rows: T[]): Array<T & { rank: number }> {
@@ -42,45 +55,59 @@ function relativeLabel(rank: number, total: number): string {
   return "標準";
 }
 
+/** 負荷値を 0〜100 のパーセンタイルに変換（最大=100, 最小=0, 同値は同スコア） */
+function calcPctMap(rows: { userId: string; load: number }[]): Map<string, number> {
+  const n = rows.length;
+  const map = new Map<string, number>();
+  if (n === 0) return map;
+  if (n === 1) { map.set(rows[0].userId, 0); return map; }
+  const sorted = [...rows].sort((a, b) => b.load - a.load);
+  let i = 0;
+  while (i < n) {
+    let j = i;
+    while (j < n && sorted[j].load === sorted[i].load) j++;
+    const avgIdx = (i + j - 1) / 2;
+    const pct = Math.round((1 - avgIdx / (n - 1)) * 100);
+    for (let k = i; k < j; k++) map.set(sorted[k].userId, pct);
+    i = j;
+  }
+  return map;
+}
+
 export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "admin") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // 全ユーザー（staff）を取得
   const users = await prisma.user.findMany({
     where: { role: "staff" },
     select: { id: true, name: true, department: true },
   });
 
-  // 全subProject（進行中のもの）を一括取得
   const subProjects = await prisma.subProject.findMany({
-    where: {
-      status: "active", // 完了を除外
-      parent: { status: "good", mergedIntoId: null },
-    },
+    where: { status: "active", parent: { status: "good", mergedIntoId: null } },
     include: {
       parent: { select: { id: true, name: true, ownerDepartment: true, departmentBudget: true, optionalAmount: true } },
       assignees: { include: { user: { select: { id: true, name: true, department: true } } } },
     },
   });
 
-  // 担当者別の集計マップを初期化
   const userAgg: Record<string, UserAggregate> = {};
   for (const u of users) {
     userAgg[u.id] = {
       userId: u.id, name: u.name, department: u.department,
-      decidedLoad: 0, proposalLoad: 0, proposalCount: 0, subProjectCount: 0, contributors: [],
+      decidedLoad: 0, decidedBudget: 0,
+      proposalLoad: 0, proposalBudget: 0,
+      proposalCount: 0, subProjectCount: 0,
+      decidedEntries: [], proposalEntries: [],
     };
   }
 
-  // 部署別 売上集計（SubProjectのdepartmentBudget のみ）
-  // 親案件1件につき子案件の部門予算の合計を売上として集計
+  // 部署別売上集計
   const byDept: Record<string, { sales: number; count: number }> = {};
   for (const d of DEPARTMENTS) byDept[d] = { sales: 0, count: 0 };
 
-  // 親案件ごとに子案件の部門予算を合算（重複カウント防止）
   const goodProjects = await prisma.project.findMany({
     where: { status: "good", mergedIntoId: null },
     include: {
@@ -90,21 +117,18 @@ export async function GET() {
   });
 
   for (const p of goodProjects) {
-    // 重複グループがある場合は主案件のみ集計
     if (p.duplicateGroupId && !p.isPrimaryInGroup) continue;
     const dept = p.ownerDepartment;
-    // 子案件がある場合は子案件の部門予算合計、ない場合は親の部門予算（移行データ）
     const subBudget = p.subProjects.length > 0
       ? p.subProjects.reduce((s, sp) => s + (sp.departmentBudget ?? 0), 0)
       : (p.departmentBudget ?? 0);
-    const sales = subBudget;
     if (byDept[dept]) {
-      byDept[dept].sales += sales;
+      byDept[dept].sales += subBudget;
       byDept[dept].count += 1;
     }
   }
 
-  // 担当者別 決定案件負荷集計（チーム構成按分方式）
+  // 担当者別 決定負荷・予算集計
   for (const sp of subProjects) {
     const loads = calcSubProjectLoads(
       sp.assignees.map((a) => ({ userId: a.userId, involvement: a.involvement as Involvement }))
@@ -112,26 +136,30 @@ export async function GET() {
     for (const a of sp.assignees) {
       const target = userAgg[a.userId];
       if (!target) continue;
-      const score = loads[a.userId] ?? 0;
-      target.decidedLoad += score;
+      const load = loads[a.userId] ?? 0;
+      target.decidedLoad += load;
+      target.decidedBudget += sp.departmentBudget ?? 0;
       target.subProjectCount += 1;
-      target.contributors.push({
+      target.decidedEntries.push({
         subProjectId: sp.id,
         subProjectName: sp.name,
         parentProjectName: sp.parent.name,
         involvement: a.involvement,
-        skillLevel: a.skillLevel,
-        contribution: score,
+        load,
+        departmentBudget: sp.departmentBudget,
       });
     }
   }
 
-  // 提案案件の負荷集計
+  // 提案案件の負荷・予算集計
   const proposalProjects = await prisma.project.findMany({
     where: { status: "undecided", mergedIntoId: null },
     select: {
       id: true,
+      name: true,
       projectType: true,
+      totalBudget: true,
+      client: { select: { name: true } },
       assignees: { select: { userId: true, involvement: true } },
     },
   });
@@ -144,37 +172,51 @@ export async function GET() {
     for (const a of p.assignees) {
       const target = userAgg[a.userId];
       if (!target) continue;
-      target.proposalLoad += loads[a.userId] ?? 0;
+      const load = loads[a.userId] ?? 0;
+      target.proposalLoad += load;
+      target.proposalBudget += p.totalBudget ?? 0;
       target.proposalCount += 1;
+      target.proposalEntries.push({
+        projectId: p.id,
+        projectName: p.name,
+        clientName: p.client.name,
+        projectType: p.projectType,
+        involvement: a.involvement,
+        load,
+        totalBudget: p.totalBudget,
+      });
     }
   }
 
   const totalSales = Object.values(byDept).reduce((s, d) => s + d.sales, 0);
 
   // baseRows 生成
-  const baseRows = users
-    .map((u) => {
-      const agg = userAgg[u.id];
-      const decidedLoad = Math.round(agg.decidedLoad * 10) / 10;
-      const proposalLoad = Math.round(agg.proposalLoad * 10) / 10;
-      const totalLoad = Math.round((decidedLoad + proposalLoad) * 10) / 10;
-      return {
-        userId: u.id,
-        name: u.name,
-        department: u.department,
-        decidedLoad,
-        proposalLoad,
-        proposalCount: agg.proposalCount,
-        totalLoad,
-        subProjectCount: agg.subProjectCount,
-        absoluteLabel: getLoadLabel(totalLoad),
-        topContributors: agg.contributors
-          .sort((a, b) => b.contribution - a.contribution)
-          .slice(0, 3),
-        score: totalLoad,
-      };
-    })
-    .sort((a, b) => b.totalLoad - a.totalLoad);
+  const baseRows = users.map((u) => {
+    const agg = userAgg[u.id];
+    const decidedLoad = Math.round(agg.decidedLoad * 10) / 10;
+    const proposalLoad = Math.round(agg.proposalLoad * 10) / 10;
+    const totalLoad = Math.round((decidedLoad + proposalLoad) * 10) / 10;
+    return {
+      userId: u.id,
+      name: u.name,
+      department: u.department,
+      decidedLoad,
+      decidedBudget: agg.decidedBudget,
+      proposalLoad,
+      proposalBudget: agg.proposalBudget,
+      proposalCount: agg.proposalCount,
+      totalLoad,
+      subProjectCount: agg.subProjectCount,
+      absoluteLabel: getLoadLabel(totalLoad),
+      decidedEntries: agg.decidedEntries.sort((a, b) => b.load - a.load),
+      proposalEntries: agg.proposalEntries.sort((a, b) => b.load - a.load),
+      score: totalLoad,
+    };
+  }).sort((a, b) => b.totalLoad - a.totalLoad);
+
+  // 総合スコア（決定70% + 提案30% のパーセンタイル合成）
+  const decidedPctMap = calcPctMap(baseRows.map(r => ({ userId: r.userId, load: r.decidedLoad })));
+  const proposalPctMap = calcPctMap(baseRows.map(r => ({ userId: r.userId, load: r.proposalLoad })));
 
   // 部署別 avgLoad
   const deptLoadMap: Record<string, { sum: number; count: number }> = {};
@@ -218,22 +260,33 @@ export async function GET() {
     }
   }
 
-  const assigneeRanking = rowsWithCompany.map((r) => ({
-    userId: r.userId,
-    name: r.name,
-    department: r.department,
-    decidedLoad: r.decidedLoad,
-    proposalLoad: r.proposalLoad,
-    proposalCount: r.proposalCount,
-    totalLoad: r.totalLoad,
-    absoluteLabel: r.absoluteLabel,
-    subProjectCount: r.subProjectCount,
-    deptRank: deptRankMap.get(r.userId)?.rank ?? 0,
-    deptRankLabel: deptRankMap.get(r.userId)?.label ?? "標準",
-    companyRank: r.companyRank,
-    companyRankLabel: r.companyRankLabel,
-    topContributors: r.topContributors,
-  }));
+  const assigneeRanking = rowsWithCompany.map((r) => {
+    const decidedPct = decidedPctMap.get(r.userId) ?? 0;
+    const proposalPct = proposalPctMap.get(r.userId) ?? 0;
+    const compositeScore = Math.round(decidedPct * 0.6 + proposalPct * 0.4);
+    return {
+      userId: r.userId,
+      name: r.name,
+      department: r.department,
+      compositeScore,
+      decidedPct,
+      proposalPct,
+      decidedLoad: r.decidedLoad,
+      decidedBudget: r.decidedBudget,
+      proposalLoad: r.proposalLoad,
+      proposalBudget: r.proposalBudget,
+      proposalCount: r.proposalCount,
+      totalLoad: r.totalLoad,
+      absoluteLabel: r.absoluteLabel,
+      subProjectCount: r.subProjectCount,
+      deptRank: deptRankMap.get(r.userId)?.rank ?? 0,
+      deptRankLabel: deptRankMap.get(r.userId)?.label ?? "標準",
+      companyRank: r.companyRank,
+      companyRankLabel: r.companyRankLabel,
+      decidedEntries: r.decidedEntries,
+      proposalEntries: r.proposalEntries,
+    };
+  });
 
   return Response.json({
     totalCount: goodProjects.length,
