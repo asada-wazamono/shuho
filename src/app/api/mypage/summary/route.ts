@@ -8,7 +8,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  // 自分がアサインされている進行中の子案件（チーム全員の情報も取得）
+  // 自分がアサインされている進行中の子案件（期問わず、アクティブ全件）
   const mySubProjects = await prisma.subProject.findMany({
     where: {
       status: "active",
@@ -36,7 +36,7 @@ export async function GET() {
     decidedSales += sp.departmentBudget ?? 0;
   }
 
-  // 提案案件の負荷計算（自分が担当者の undecided 案件）
+  // 提案案件の負荷計算（期問わず、アクティブ全件）
   const myProposalProjects = await prisma.project.findMany({
     where: {
       status: "undecided",

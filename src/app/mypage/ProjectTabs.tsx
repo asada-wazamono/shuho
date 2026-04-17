@@ -45,7 +45,7 @@ type Project = {
   subProjects: SubProject[];
 };
 
-type Tab = "proposal" | "decided" | "bad";
+type Tab = "proposal" | "decided" | "bad" | "completed";
 type SortDir = "asc" | "desc";
 type SortKey =
   | "createdAt"
@@ -262,7 +262,7 @@ export function ProjectTabs() {
     <section className="rounded border border-stone-200 bg-white shadow-sm">
       {/* タブ */}
       <div className="flex border-b border-stone-200">
-        {(["proposal", "decided", "bad"] as Tab[]).map((key) => (
+        {(["proposal", "decided", "completed", "bad"] as Tab[]).map((key) => (
           <button
             key={key}
             type="button"
@@ -271,7 +271,7 @@ export function ProjectTabs() {
               tab === key ? "border-b-2 border-amber-600 text-amber-700" : "text-stone-500 hover:text-stone-700"
             }`}
           >
-            {key === "proposal" ? "提案案件一覧" : key === "decided" ? "決定案件一覧" : "Bad案件一覧"}
+            {key === "proposal" ? "提案案件" : key === "decided" ? "決定案件" : key === "completed" ? "完了案件" : "Bad案件"}
           </button>
         ))}
       </div>
@@ -541,6 +541,57 @@ export function ProjectTabs() {
                     </tr>
                   );
                 });
+              })}
+            </tbody>
+          </table>
+        ) : tab === "completed" ? (
+          /* ─── 完了案件タブ ─── */
+          <table className="w-full min-w-[960px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-stone-200 text-stone-600">
+                <th className="p-2">クライアント</th>
+                <th className="p-2">案件名</th>
+                <th className="p-2">子案件名</th>
+                <th className="p-2">部門予算</th>
+                <th className="p-2">実施期間</th>
+                <th className="p-2">担当者</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.flatMap((p) => {
+                if (p.subProjects.length === 0) {
+                  return (
+                    <tr key={p.id} className="border-b border-stone-100 hover:bg-stone-50">
+                      <td className="p-2">{p.client.name}</td>
+                      <td className="p-2">
+                        <Link href={`/mypage/projects/${p.id}`} className="text-amber-700 hover:underline">{p.name}</Link>
+                      </td>
+                      <td className="p-2 text-stone-400">-</td>
+                      <td className="p-2">{p.totalBudget != null ? `¥${p.totalBudget.toLocaleString()}` : "-"}</td>
+                      <td className="p-2">-</td>
+                      <td className="p-2">{p.assignees.map((a) => a.user.name).join(", ")}</td>
+                    </tr>
+                  );
+                }
+                return p.subProjects.map((sp, i) => (
+                  <tr key={sp.id} className="border-b border-stone-100 hover:bg-stone-50">
+                    {i === 0 && (
+                      <>
+                        <td className="p-2 align-top" rowSpan={p.subProjects.length}>{p.client.name}</td>
+                        <td className="p-2 align-top" rowSpan={p.subProjects.length}>
+                          <Link href={`/mypage/projects/${p.id}`} className="text-amber-700 hover:underline">{p.name}</Link>
+                        </td>
+                      </>
+                    )}
+                    <td className="p-2 text-stone-600">└ {sp.name}</td>
+                    <td className="p-2">{sp.departmentBudget != null ? `¥${sp.departmentBudget.toLocaleString()}` : "-"}</td>
+                    <td className="p-2 text-xs">
+                      {sp.periodStart ? new Date(sp.periodStart).toLocaleDateString("ja") : "-"}
+                      {sp.periodEnd ? ` 〜 ${new Date(sp.periodEnd).toLocaleDateString("ja")}` : ""}
+                    </td>
+                    <td className="p-2">{sp.assignees.map((a) => a.user.name).join(", ")}</td>
+                  </tr>
+                ));
               })}
             </tbody>
           </table>

@@ -37,8 +37,12 @@ export async function GET(request: NextRequest) {
       where.status = "undecided";
     } else if (tab === "decided") {
       where.status = "good";
+      where.projectStatus = { not: "completed" };
     } else if (tab === "bad") {
       where.status = "bad";
+    } else if (tab === "completed") {
+      where.status = "good";
+      where.projectStatus = "completed";
     }
   }
 

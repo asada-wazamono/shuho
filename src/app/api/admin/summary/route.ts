@@ -86,7 +86,10 @@ export async function GET() {
   });
 
   const subProjects = await prisma.subProject.findMany({
-    where: { status: "active", parent: { status: "good", mergedIntoId: null } },
+    where: {
+      status: "active",
+      parent: { status: "good", mergedIntoId: null },
+    },
     include: {
       parent: { select: { id: true, name: true, ownerDepartment: true, departmentBudget: true, optionalAmount: true } },
       assignees: { include: { user: { select: { id: true, name: true, department: true } } } },

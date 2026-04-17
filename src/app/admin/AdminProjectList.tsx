@@ -48,7 +48,7 @@ type Project = {
   subProjects: SubProject[];
 };
 
-type Tab = "decided" | "proposal" | "bad";
+type Tab = "decided" | "proposal" | "bad" | "completed";
 type SortDir = "asc" | "desc";
 
 type FieldChoice = "source" | "target";
@@ -117,7 +117,7 @@ export function AdminProjectList() {
 
   useEffect(() => {
     const t = searchParams.get("tab");
-    if (t === "proposal" || t === "decided" || t === "bad") setTab(t as Tab);
+    if (t === "proposal" || t === "decided" || t === "bad" || t === "completed") setTab(t as Tab);
   }, [searchParams]);
 
   useEffect(() => {
@@ -293,7 +293,7 @@ export function AdminProjectList() {
     <section className="rounded border border-stone-200 bg-white shadow-sm">
       {/* タブ */}
       <div className="flex border-b border-stone-200">
-        {(["decided", "proposal", "bad"] as Tab[]).map((t) => (
+        {(["decided", "proposal", "completed", "bad"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -302,7 +302,7 @@ export function AdminProjectList() {
               tab === t ? "border-b-2 border-amber-600 text-amber-700" : "text-stone-500 hover:text-stone-700"
             }`}
           >
-            {t === "decided" ? "決定案件" : t === "proposal" ? "提案案件" : "Bad案件"}
+            {t === "decided" ? "決定案件" : t === "proposal" ? "提案案件" : t === "completed" ? "完了案件" : "Bad案件"}
           </button>
         ))}
       </div>
@@ -528,6 +528,62 @@ export function AdminProjectList() {
                     </td>
                   </tr>
                 );
+              })}
+            </tbody>
+          </table>
+
+        ) : tab === "completed" ? (
+
+          /* ─── 完了案件 ─── */
+          <table className="w-full min-w-[1100px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-stone-200 text-stone-600">
+                <SortTh k="ownerDepartment" label="担当部署" {...sortProps} />
+                <SortTh k="client"          label="クライアント" {...sortProps} />
+                <SortTh k="name"            label="案件名" {...sortProps} />
+                <th className="p-2">子案件名</th>
+                <th className="p-2">部門予算</th>
+                <th className="p-2">実施期間</th>
+                <th className="p-2">担当者</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedProjects.flatMap((p) => {
+                if (p.subProjects.length === 0) {
+                  return (
+                    <tr key={p.id} className="border-b border-stone-100 hover:bg-stone-50">
+                      <td className="p-2">{p.ownerDepartment}</td>
+                      <td className="p-2">{p.client.name}</td>
+                      <td className="p-2">
+                        <Link href={`/admin/projects/${p.id}`} className="text-amber-700 hover:underline">{p.name}</Link>
+                      </td>
+                      <td className="p-2 text-stone-400">-</td>
+                      <td className="p-2">{p.totalBudget != null ? `¥${p.totalBudget.toLocaleString()}` : "-"}</td>
+                      <td className="p-2">-</td>
+                      <td className="p-2">{p.assignees.map((a) => shortName(a.user.name)).join(" / ")}</td>
+                    </tr>
+                  );
+                }
+                return p.subProjects.map((sp, i) => (
+                  <tr key={sp.id} className="border-b border-stone-100 hover:bg-stone-50">
+                    {i === 0 && (
+                      <>
+                        <td className="p-2 align-top" rowSpan={p.subProjects.length}>{p.ownerDepartment}</td>
+                        <td className="p-2 align-top" rowSpan={p.subProjects.length}>{p.client.name}</td>
+                        <td className="p-2 align-top" rowSpan={p.subProjects.length}>
+                          <Link href={`/admin/projects/${p.id}`} className="text-amber-700 hover:underline">{p.name}</Link>
+                        </td>
+                      </>
+                    )}
+                    <td className="p-2 text-stone-600">└ {sp.name}</td>
+                    <td className="p-2">{sp.departmentBudget != null ? `¥${sp.departmentBudget.toLocaleString()}` : "-"}</td>
+                    <td className="p-2 text-xs">
+                      {sp.periodStart ? new Date(sp.periodStart).toLocaleDateString("ja") : "-"}
+                      {sp.periodEnd ? ` 〜 ${new Date(sp.periodEnd).toLocaleDateString("ja")}` : ""}
+                    </td>
+                    <td className="p-2">{sp.assignees.map((a) => shortName(a.user.name)).join(" / ")}</td>
+                  </tr>
+                ));
               })}
             </tbody>
           </table>
