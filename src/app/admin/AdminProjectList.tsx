@@ -360,7 +360,7 @@ export function AdminProjectList() {
         if (!assignees.includes(filters.assignee)) return false;
       }
       return true;
-    }), [projects, filters]);
+    }), [projects, filters, tab]);
 
   const sortedProjects = useMemo(() => {
     const list = [...filteredProjects];

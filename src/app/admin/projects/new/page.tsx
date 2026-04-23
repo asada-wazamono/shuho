@@ -22,7 +22,6 @@ export default function AdminNewProjectPage() {
   const searchParams = useSearchParams();
   const [clients, setClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const fromModal = useRef(false);
@@ -53,10 +52,6 @@ export default function AdminNewProjectPage() {
       .then((r) => r.json())
       .then((list) => setUsers(Array.isArray(list) ? list : []))
       .catch(() => setUsers([]));
-    fetch("/api/auth/session")
-      .then((r) => r.json())
-      .then((data) => setSessionUserId(data?.user?.id ?? null))
-      .catch(() => {});
   }, []);
 
   // URL の ?clientId= からクライアントを自動選択
