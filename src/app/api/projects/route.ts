@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
             departmentBudget: true,
             periodStart: true,
             periodEnd: true,
+            note: true,
             assignees: {
               select: {
                 userId: true,

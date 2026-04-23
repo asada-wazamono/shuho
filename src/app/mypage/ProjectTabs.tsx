@@ -20,6 +20,7 @@ type SubProject = {
   departmentBudget: number | null;
   periodStart: string | null;
   periodEnd: string | null;
+  note: string | null;
   assignees: { userId: string; involvement: string; skillLevel: number; user: { name: string } }[];
 };
 
@@ -475,16 +476,7 @@ export function ProjectTabs() {
                             : "-"}
                         </span>
                       </td>
-                      <td className="p-2">
-                        <div className="group relative max-w-[120px]">
-                          <span className="block truncate text-xs">{p.note ?? "-"}</span>
-                          {p.note && (
-                            <div className="pointer-events-none absolute right-0 top-full z-50 hidden w-64 whitespace-pre-wrap rounded border border-stone-200 bg-white p-2 text-xs text-stone-700 shadow-lg group-hover:block">
-                              {p.note}
-                            </div>
-                          )}
-                        </div>
-                      </td>
+                      <td className="p-2 text-xs text-stone-400">-</td>
                     </tr>
                   )];
                 }
@@ -562,10 +554,10 @@ export function ProjectTabs() {
                       </td>
                       <td className="p-2">
                         <div className="group relative max-w-[120px]">
-                          <span className="block truncate text-xs">{p.note ?? "-"}</span>
-                          {p.note && (
+                          <span className="block truncate text-xs">{sp.note ?? "-"}</span>
+                          {sp.note && (
                             <div className="pointer-events-none absolute right-0 top-full z-50 hidden w-64 whitespace-pre-wrap rounded border border-stone-200 bg-white p-2 text-xs text-stone-700 shadow-lg group-hover:block">
-                              {p.note}
+                              {sp.note}
                             </div>
                           )}
                         </div>

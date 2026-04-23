@@ -27,6 +27,7 @@ type SubProject = {
   departmentBudget: number | null;
   periodStart: string | null;
   periodEnd: string | null;
+  note: string | null;
   assignees: SubProjectAssignee[];
 };
 
@@ -581,18 +582,16 @@ export function AdminProjectList() {
                         </div>
                       </td>
                       <td className="p-2">{new Date(firstRow.updatedAt).toLocaleDateString("ja")}</td>
-                      {i === 0 && (
-                        <td className="p-2" rowSpan={rowSpanCount}>
-                          <div className="group relative max-w-[120px]">
-                            <span className="block truncate text-xs">{firstRow.note ?? "-"}</span>
-                            {firstRow.note && (
-                              <div className="pointer-events-none absolute right-0 top-full z-50 hidden w-64 whitespace-pre-wrap rounded border border-stone-200 bg-white p-2 text-xs text-stone-700 shadow-lg group-hover:block">
-                                {firstRow.note}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      )}
+                      <td className="p-2">
+                        <div className="group relative max-w-[120px]">
+                          <span className="block truncate text-xs">{sp.note ?? "-"}</span>
+                          {sp.note && (
+                            <div className="pointer-events-none absolute right-0 top-full z-50 hidden w-64 whitespace-pre-wrap rounded border border-stone-200 bg-white p-2 text-xs text-stone-700 shadow-lg group-hover:block">
+                              {sp.note}
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-2">
                         {i === 0 && sameClientCount > 0 && sourceProject && (
                           <button
