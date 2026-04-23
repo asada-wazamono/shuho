@@ -396,7 +396,16 @@ export function ProjectTabs() {
                     <td className="p-2">{p.proposalDate ? new Date(p.proposalDate).toLocaleDateString("ja") : "-"}</td>
                     <td className="p-2">{p.periodStart ? new Date(p.periodStart).toLocaleDateString("ja") : "-"}</td>
                     <td className="p-2">{elapsedDays != null ? `${elapsedDays}日` : "-"}</td>
-                    <td className="max-w-[120px] truncate p-2" title={p.note ?? ""}>{p.note ?? "-"}</td>
+                    <td className="p-2">
+                      <div className="group relative max-w-[120px]">
+                        <span className="block truncate">{p.note ?? "-"}</span>
+                        {p.note && (
+                          <div className="pointer-events-none absolute right-0 top-full z-50 hidden w-64 whitespace-pre-wrap rounded border border-stone-200 bg-white p-2 text-xs text-stone-700 shadow-lg group-hover:block">
+                            {p.note}
+                          </div>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -626,7 +635,16 @@ export function ProjectTabs() {
                   <td className="p-2">{p.businessContent}</td>
                   <td className="p-2">{p.totalBudget != null ? `¥${p.totalBudget.toLocaleString()}` : "-"}</td>
                   <td className="max-w-[240px] p-2 text-xs text-stone-600 whitespace-pre-wrap">{p.badReason ?? "-"}</td>
-                  <td className="max-w-[120px] truncate p-2" title={p.note ?? ""}>{p.note ?? "-"}</td>
+                  <td className="p-2">
+                    <div className="group relative max-w-[120px]">
+                      <span className="block truncate">{p.note ?? "-"}</span>
+                      {p.note && (
+                        <div className="pointer-events-none absolute right-0 top-full z-50 hidden w-64 whitespace-pre-wrap rounded border border-stone-200 bg-white p-2 text-xs text-stone-700 shadow-lg group-hover:block">
+                          {p.note}
+                        </div>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
