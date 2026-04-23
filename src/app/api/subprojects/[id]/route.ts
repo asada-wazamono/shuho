@@ -78,6 +78,9 @@ export async function PATCH(
   if (body.businessContent !== undefined) {
     data.businessContent = body.businessContent ? String(body.businessContent) : null;
   }
+  if (body.note !== undefined) {
+    data.note = body.note ? String(body.note) : null;
+  }
   if (body.departmentBudget !== undefined) {
     data.departmentBudget = body.departmentBudget == null ? null : Number(body.departmentBudget);
   }

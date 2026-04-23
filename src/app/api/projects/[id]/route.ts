@@ -32,6 +32,9 @@ const PROJECT_INCLUDE = {
     },
     orderBy: { createdAt: "asc" as const },
   },
+  mergedProjects: {
+    select: { id: true, name: true, status: true },
+  },
 };
 
 // GET: 1件取得（subProjects含む）
@@ -231,6 +234,7 @@ export async function PATCH(
   if (nextStatus !== existing.status) shouldUpdateStatusUpdatedAt = true;
   if (body.proposalStatus !== undefined && body.proposalStatus !== existing.proposalStatus) {
     shouldUpdateStatusUpdatedAt = true;
+    (data as Record<string, unknown>).proposalStatusUpdatedAt = new Date(); // 提案ステータス専用の更新日
   }
   if (body.projectStatus !== undefined && body.projectStatus !== existing.projectStatus) {
     shouldUpdateStatusUpdatedAt = true;

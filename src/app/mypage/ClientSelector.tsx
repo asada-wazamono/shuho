@@ -7,7 +7,9 @@ type Client = { id: string; name: string };
 
 const NEW_CLIENT_VALUE = "__new__";
 
-export function ClientSelector() {
+type Props = { adminMode?: boolean };
+
+export function ClientSelector({ adminMode = false }: Props) {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
@@ -15,6 +17,7 @@ export function ClientSelector() {
   // 新規クライアント登録モーダル
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientName, setNewClientName] = useState("");
+  const [newClientCode, setNewClientCode] = useState("");
   const [newClientDept, setNewClientDept] = useState("");
   const [newClientNote, setNewClientNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -51,18 +54,25 @@ export function ClientSelector() {
     e.preventDefault();
     setError("");
     if (!newClientName.trim()) { setError("クライアント名は必須です"); return; }
+    if (!newClientCode.trim()) { setError("クライアントコードは必須です"); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newClientName.trim(), department: newClientDept || null, note: newClientNote || null }),
+        body: JSON.stringify({
+          name: newClientName.trim(),
+          clientCode: newClientCode.trim(),
+          department: newClientDept || null,
+          note: newClientNote || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "登録に失敗しました");
       fetchClients();
       setShowNewClient(false);
       setNewClientName("");
+      setNewClientCode("");
       setNewClientDept("");
       setNewClientNote("");
       // 作成したクライアントのモーダルをそのまま開く
@@ -115,6 +125,19 @@ export function ClientSelector() {
                 />
               </div>
               <div>
+                <label className="mb-1 block text-sm font-medium text-stone-700">
+                  クライアントコード *
+                  <span className="ml-1 text-xs font-normal text-stone-400">（例：ABC-001）</span>
+                </label>
+                <input
+                  type="text"
+                  value={newClientCode}
+                  onChange={(e) => setNewClientCode(e.target.value)}
+                  placeholder="例：ABC-001"
+                  className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
                 <label className="mb-1 block text-sm font-medium text-stone-700">部署名</label>
                 <input
                   type="text"
@@ -159,6 +182,7 @@ export function ClientSelector() {
           clientId={selectedClient.id}
           clientName={selectedClient.name}
           sessionUserId={sessionUserId}
+          adminMode={adminMode}
           onClose={() => setSelectedClient(null)}
         />
       )}

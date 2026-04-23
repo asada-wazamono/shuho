@@ -44,10 +44,11 @@ type Props = {
   clientId: string;
   clientName: string;
   sessionUserId: string | null;
+  adminMode?: boolean;
   onClose: () => void;
 };
 
-export function ClientModal({ clientId, clientName, sessionUserId, onClose }: Props) {
+export function ClientModal({ clientId, clientName, sessionUserId, adminMode = false, onClose }: Props) {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,7 +175,7 @@ export function ClientModal({ clientId, clientName, sessionUserId, onClose }: Pr
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2 min-w-0">
                           <Link
-                            href={`/mypage/projects/${p.id}`}
+                            href={adminMode ? `/admin/projects/${p.id}` : `/mypage/projects/${p.id}`}
                             onClick={onClose}
                             className="font-medium text-stone-800 hover:text-amber-700 hover:underline"
                           >
@@ -188,7 +189,11 @@ export function ClientModal({ clientId, clientName, sessionUserId, onClose }: Pr
                             type="button"
                             onClick={() => {
                               onClose();
-                              router.push(`/mypage/projects/${p.id}/subprojects/new`);
+                              if (adminMode) {
+                                router.push(`/admin/projects/${p.id}/subprojects/new`);
+                              } else {
+                                router.push(`/mypage/projects/${p.id}/subprojects/new`);
+                              }
                             }}
                             className="shrink-0 rounded border border-amber-400 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50"
                           >
@@ -222,7 +227,7 @@ export function ClientModal({ clientId, clientName, sessionUserId, onClose }: Pr
                                     <div className="flex flex-wrap items-center gap-1.5 text-sm">
                                       <span className="text-stone-300 text-xs">↳</span>
                                       <Link
-                                        href={`/mypage/subprojects/${sp.id}`}
+                                        href={adminMode ? `/admin/subprojects/${sp.id}` : `/mypage/subprojects/${sp.id}`}
                                         onClick={onClose}
                                         className="font-medium text-stone-700 hover:text-amber-700 hover:underline"
                                       >
@@ -357,7 +362,11 @@ export function ClientModal({ clientId, clientName, sessionUserId, onClose }: Pr
             type="button"
             onClick={() => {
               onClose();
-              router.push(`/mypage/projects/new?clientId=${clientId}`);
+              if (adminMode) {
+                router.push(`/admin/projects/new?clientId=${clientId}`);
+              } else {
+                router.push(`/mypage/projects/new?clientId=${clientId}`);
+              }
             }}
             className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
           >

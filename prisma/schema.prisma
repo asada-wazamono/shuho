@@ -28,11 +28,12 @@ model User {
 
 model Client {
   id         String    @id @default(cuid())
+  clientCode String?   @unique // 6桁数字コード
   name       String
-  department String?   // 任意
+  department String?
   note       String?
   createdAt  DateTime  @default(now())
-  disabledAt DateTime? // 無効化（紐付く案件がある場合の削除代替）
+  disabledAt DateTime?
 
   projects Project[]
 }
@@ -74,9 +75,10 @@ model Project {
 
   status          String    @default("undecided") // good | bad | undecided
   badReason       String?   // Bad確定時の理由（必須入力）
-  proposalStatus  String?   // 提案案件ステータス
-  projectStatus   String?   // 実行フェーズステータス: active(進行中) | suspended(中断) | completed(完了)
-  statusUpdatedAt DateTime? // ステータス最終更新日
+  proposalStatus          String?   // 提案案件ステータス
+  proposalStatusUpdatedAt DateTime? // 提案ステータス最終更新日
+  projectStatus           String?   // 実行フェーズステータス: active(進行中) | suspended(中断) | completed(完了)
+  statusUpdatedAt         DateTime? // ステータス最終更新日
   note            String?
   ownerDepartment String    // メイン担当部署（1DCD等）
 
@@ -104,6 +106,7 @@ model SubProject {
   businessContent  String? // 子案件業務内容（詳細選択肢）
   periodStart      DateTime? // 実施開始日（日不明時は1日）
   periodEnd        DateTime? // 実施終了日（日不明時は1日）
+  note             String? // 備考
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -22,13 +22,22 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { name, department, note } = body;
+  const { name, department, note, clientCode } = body;
   if (!name || !String(name).trim()) {
     return Response.json({ error: "クライアント名は必須です" }, { status: 400 });
+  }
+  if (!clientCode || !String(clientCode).trim()) {
+    return Response.json({ error: "クライアントコードは必須です" }, { status: 400 });
+  }
+
+  const existing = await prisma.client.findUnique({ where: { clientCode: String(clientCode).trim() } });
+  if (existing) {
+    return Response.json({ error: "このクライアントコードはすでに使用されています" }, { status: 400 });
   }
 
   const client = await prisma.client.create({
     data: {
+      clientCode: String(clientCode).trim(),
       name: String(name).trim(),
       department: department ? String(department) : null,
       note: note ? String(note) : null,

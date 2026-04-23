@@ -11,12 +11,13 @@ export async function GET() {
   const now = new Date();
   const threshold = new Date(now.getTime() - REMINDER_DAYS * 24 * 60 * 60 * 1000);
 
-  // 提案日から7日以上経過 かつ proposalStatus が "preparing" のまま の案件
+  // 提案日から7日以上経過 かつ proposalStatus が "waiting_response"（提案済・回答待ち）のまま の案件
+  // 翌朝cronで自動的に"waiting_response"に切り替わるので、そこから1週間音沙汰なしの案件をリマインド
   // かつ自分が担当している
   const projects = await prisma.project.findMany({
     where: {
       status: "undecided",
-      proposalStatus: "preparing",
+      proposalStatus: "waiting_response",
       proposalDate: { lte: threshold },
       mergedIntoId: null,
       assignees: { some: { userId: session.id } },

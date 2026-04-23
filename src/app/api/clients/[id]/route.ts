@@ -14,6 +14,7 @@ export async function PATCH(
   const body = await request.json();
   const data: Record<string, unknown> = {};
   if (body.name !== undefined) data.name = String(body.name).trim();
+  if (body.clientCode !== undefined) data.clientCode = body.clientCode ? String(body.clientCode).trim() : null;
   if (body.department !== undefined) data.department = body.department ? String(body.department) : null;
   if (body.note !== undefined) data.note = body.note ? String(body.note) : null;
 

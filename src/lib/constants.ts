@@ -1,5 +1,5 @@
 // 部署（要件どおり固定）
-export const DEPARTMENTS = ["1DCD", "2DCD", "3DCD", "戦略PL"] as const;
+export const DEPARTMENTS = ["1DCD", "2DCD", "3DCD", "戦略PL", "DS", "AEPL", "Admin"] as const;
 export type Department = (typeof DEPARTMENTS)[number];
 
 // 案件種別（「指名(決定)」は削除）

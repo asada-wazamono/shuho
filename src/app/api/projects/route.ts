@@ -50,18 +50,29 @@ export async function GET(request: NextRequest) {
     where,
     include: {
       client: {
-        select: { id: true, name: true, department: true, note: true, createdAt: true, disabledAt: true },
+        select: { id: true, name: true },
       },
       assignees: {
-        include: {
-          user: { select: { id: true, name: true, department: true, role: true } },
+        select: {
+          userId: true,
+          involvement: true,
+          user: { select: { id: true, name: true, department: true } },
         },
       },
       subProjects: {
-        include: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          businessContent: true,
+          departmentBudget: true,
+          periodStart: true,
+          periodEnd: true,
           assignees: {
-            include: {
-              user: { select: { id: true, name: true, department: true, role: true } },
+            select: {
+              userId: true,
+              involvement: true,
+              user: { select: { id: true, name: true, department: true } },
             },
           },
         },
@@ -169,19 +180,28 @@ export async function POST(request: NextRequest) {
       },
     },
     include: {
-      client: {
-        select: { id: true, name: true, department: true, note: true, createdAt: true, disabledAt: true },
-      },
+      client: { select: { id: true, name: true } },
       assignees: {
-        include: {
-          user: { select: { id: true, name: true, department: true, role: true } },
+        select: {
+          userId: true,
+          involvement: true,
+          user: { select: { id: true, name: true, department: true } },
         },
       },
       subProjects: {
-        include: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          businessContent: true,
+          departmentBudget: true,
+          periodStart: true,
+          periodEnd: true,
           assignees: {
-            include: {
-              user: { select: { id: true, name: true, department: true, role: true } },
+            select: {
+              userId: true,
+              involvement: true,
+              user: { select: { id: true, name: true, department: true } },
             },
           },
         },

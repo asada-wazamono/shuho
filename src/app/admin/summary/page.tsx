@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
 import { INVOLVEMENT_LABELS, type Involvement } from "@/lib/constants";
 
 type DecidedEntry = {
   subProjectId: string;
   subProjectName: string;
+  parentProjectId: string;
   parentProjectName: string;
+  clientName: string;
   involvement: string;
   load: number;
   departmentBudget: number | null;
@@ -46,6 +49,7 @@ type AssigneeRow = {
 };
 
 type Summary = {
+  fy: number;
   totalCount: number;
   totalSales: number;
   departmentSummary: { department: string; sales: number; count: number; avgLoad: string | null }[];
@@ -69,10 +73,12 @@ function SortBtn({ col, label, sortKey, sortDir, onSort }: {
 
 /** 総合スコアのバッジ＋バー */
 function CompositeScoreBadge({ score }: { score: number }) {
+  // score = 合計負荷のパーセンタイル（0〜100）
+  // 上位15%（≥85）→ 過負荷、上位35%（≥65）→ 高負荷、上位65%（≥35）→ 標準、それ以下 → 余裕
   const { bg, label } =
-    score >= 75 ? { bg: "bg-red-500",    label: "要対応" } :
-    score >= 50 ? { bg: "bg-amber-500",  label: "注意"   } :
-    score >= 25 ? { bg: "bg-amber-300",  label: "標準"   } :
+    score >= 85 ? { bg: "bg-red-500",    label: "過負荷" } :
+    score >= 65 ? { bg: "bg-amber-500",  label: "高負荷" } :
+    score >= 35 ? { bg: "bg-amber-300",  label: "標準"   } :
                   { bg: "bg-emerald-400",label: "余裕"   };
   return (
     <div className="flex flex-col gap-1 min-w-[80px]">
@@ -106,6 +112,17 @@ const BUDGET_BADGE: Record<number, string> = {
   3: "bg-amber-700 text-amber-50",
 };
 
+/** 円 → 億万 表示（例: 3億4200万、5000万） */
+function formatBudget(yen: number): string {
+  if (yen >= 100_000_000) {
+    const oku = Math.floor(yen / 100_000_000);
+    const man = Math.round((yen % 100_000_000) / 10_000);
+    return man > 0 ? `${oku}億${man.toLocaleString()}万` : `${oku}億`;
+  }
+  const man = Math.round(yen / 10_000);
+  return `${man.toLocaleString()}万`;
+}
+
 /** 負荷＋予算の縦2段セル */
 function LoadBudgetCell({
   load, budget, maxLoad, maxBudget, loadColor, budgetColor, budgetRank,
@@ -126,7 +143,7 @@ function LoadBudgetCell({
             {budgetRank}
           </span>
         )}
-        ¥{(budget / 10000).toLocaleString()}万
+        {formatBudget(budget)}
       </div>
       <LoadBar value={budget} maxVal={maxBudget} color={budgetColor} />
     </div>
@@ -149,8 +166,14 @@ function TotalLoadBar({ value, maxLoad }: { value: number; maxLoad: number }) {
   );
 }
 
+function getClientFiscalYear() {
+  const d = new Date();
+  return d.getMonth() + 1 >= 4 ? d.getFullYear() : d.getFullYear() - 1;
+}
+
 export default function AdminSummaryPage() {
   const [data, setData] = useState<Summary | null>(null);
+  const [fy, setFy] = useState(getClientFiscalYear);
   const [deptFilter, setDeptFilter] = useState("");
   const [nameFilter, setNameFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey | null>("compositeScore");
@@ -159,11 +182,12 @@ export default function AdminSummaryPage() {
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetch("/api/admin/summary")
+    setData(null);
+    fetch(`/api/admin/summary?fy=${fy}`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => setData(null));
-  }, []);
+  }, [fy]);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -267,13 +291,29 @@ export default function AdminSummaryPage() {
 
   if (!data) return <p className="text-stone-500">読み込み中…</p>;
 
+  const fyOptions = Array.from({ length: 5 }, (_, i) => getClientFiscalYear() - i);
+
   return (
     <div className="space-y-8">
-      <h1 className="text-xl font-bold text-stone-800">全体数値サマリー</h1>
+      <div className="flex flex-wrap items-center gap-4">
+        <h1 className="text-xl font-bold text-stone-800">全体数値サマリー</h1>
+        <label className="flex items-center gap-2 text-sm">
+          会計年度
+          <select
+            value={fy}
+            onChange={(e) => setFy(Number(e.target.value))}
+            className="rounded border border-stone-300 bg-white px-2 py-1 text-sm"
+          >
+            {fyOptions.map((y) => (
+              <option key={y} value={y}>FY{y}（{y}年4月〜{y + 1}年3月）</option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {/* 全体サマリー */}
       <section className="rounded border border-stone-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-sm font-semibold text-stone-600">全体</h2>
+        <h2 className="mb-4 text-sm font-semibold text-stone-600">全体（FY{data.fy}）</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <p className="text-xs text-stone-500">決定案件数（親案件）</p>
@@ -281,14 +321,14 @@ export default function AdminSummaryPage() {
           </div>
           <div>
             <p className="text-xs text-stone-500">決定売上合計（子案件部門予算）</p>
-            <p className="text-2xl font-bold">¥{data.totalSales.toLocaleString()}</p>
+            <p className="text-2xl font-bold">{formatBudget(data.totalSales)}</p>
           </div>
         </div>
       </section>
 
       {/* 部署別 */}
       <section className="rounded border border-stone-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-1 text-sm font-semibold text-stone-600">部署別</h2>
+        <h2 className="mb-1 text-sm font-semibold text-stone-600">部署別（FY{data.fy}）</h2>
         <p className="mb-3 text-xs text-stone-400">行をクリックすると担当者の内訳を表示</p>
         <table className="w-full text-left text-sm">
           <thead>
@@ -316,7 +356,7 @@ export default function AdminSummaryPage() {
                       <span className="mr-1 text-stone-400">{isExpanded ? "▾" : "▸"}</span>
                       {d.department}
                     </td>
-                    <td className="p-2">¥{d.sales.toLocaleString()}</td>
+                    <td className="p-2">{formatBudget(d.sales)}</td>
                     <td className="p-2">{d.count}</td>
                     <td className="p-2">{d.avgLoad ?? "-"}</td>
                     <td className="p-2">
@@ -341,7 +381,6 @@ export default function AdminSummaryPage() {
                               </span>
                               <span className="text-stone-500">
                                 合計 <span className="font-bold text-stone-800">{m.totalLoad.toFixed(1)}</span>
-                                <span className="ml-1 text-stone-400">({m.absoluteLabel})</span>
                               </span>
                             </div>
                           ))}
@@ -442,17 +481,8 @@ export default function AdminSummaryPage() {
                             budgetRank={proposalBudgetRankMap.get(u.userId)}
                           />
                         </td>
-                        <td className="p-2">
-                          <div className="space-y-0.5">
-                            <span className="font-semibold">{u.totalLoad.toFixed(1)}</span>
-                            <div>
-                              <span className={`text-xs ${
-                                u.absoluteLabel === "過負荷" ? "font-bold text-red-600" :
-                                u.absoluteLabel === "高負荷" ? "font-medium text-amber-600" :
-                                u.absoluteLabel === "やや過多" ? "text-amber-500" : "text-stone-400"
-                              }`}>{u.absoluteLabel}</span>
-                            </div>
-                          </div>
+                        <td className="p-2 font-semibold">
+                          {u.totalLoad.toFixed(1)}
                         </td>
                         <td className="p-2"><TotalLoadBar value={u.totalLoad} maxLoad={maxLoad} /></td>
                         <td className="p-2 text-stone-500">{u.deptRank}位<span className="ml-0.5 text-xs text-stone-400">({u.deptRankLabel})</span></td>
@@ -479,7 +509,8 @@ export default function AdminSummaryPage() {
                                       <div key={e.subProjectId} className="rounded border border-stone-200 bg-white px-3 py-2">
                                         <div className="flex items-start justify-between gap-2">
                                           <div className="min-w-0">
-                                            <p className="truncate text-xs font-medium text-stone-700">{e.parentProjectName}</p>
+                                            <Link href={`/admin?tab=decided&client=${encodeURIComponent(e.clientName)}`} className="truncate text-xs text-stone-400 hover:underline hover:text-amber-600">{e.clientName}</Link>
+                                            <Link href={`/admin/projects/${e.parentProjectId}`} className="truncate text-xs font-medium text-amber-700 hover:underline block">{e.parentProjectName}</Link>
                                             <p className="truncate text-xs text-stone-500">└ {e.subProjectName}</p>
                                           </div>
                                           <span className="shrink-0 text-xs font-semibold text-amber-600">{e.load.toFixed(1)}pt</span>
@@ -487,7 +518,7 @@ export default function AdminSummaryPage() {
                                         <div className="mt-1 flex gap-3 text-xs text-stone-400">
                                           <span>関わり度：{INVOLVEMENT_LABELS[e.involvement as Involvement] ?? e.involvement}</span>
                                           {e.departmentBudget != null && (
-                                            <span>¥{(e.departmentBudget / 10000).toLocaleString()}万</span>
+                                            <span>{formatBudget(e.departmentBudget)}</span>
                                           )}
                                         </div>
                                       </div>
@@ -510,8 +541,8 @@ export default function AdminSummaryPage() {
                                       <div key={e.projectId} className="rounded border border-stone-200 bg-white px-3 py-2">
                                         <div className="flex items-start justify-between gap-2">
                                           <div className="min-w-0">
-                                            <p className="truncate text-xs font-medium text-stone-700">{e.clientName}</p>
-                                            <p className="truncate text-xs text-stone-500">└ {e.projectName}</p>
+                                            <Link href={`/admin?tab=proposal&client=${encodeURIComponent(e.clientName)}`} className="truncate text-xs text-stone-400 hover:underline hover:text-sky-600">{e.clientName}</Link>
+                                            <Link href={`/admin/projects/${e.projectId}`} className="truncate text-xs font-medium text-sky-700 hover:underline block">{e.projectName}</Link>
                                           </div>
                                           <span className="shrink-0 text-xs font-semibold text-sky-600">{e.load.toFixed(1)}pt</span>
                                         </div>
@@ -519,7 +550,7 @@ export default function AdminSummaryPage() {
                                           <span>{e.projectType}</span>
                                           <span>関わり度：{INVOLVEMENT_LABELS[e.involvement as Involvement] ?? e.involvement}</span>
                                           {e.totalBudget != null && (
-                                            <span>¥{(e.totalBudget / 10000).toLocaleString()}万</span>
+                                            <span>{formatBudget(e.totalBudget)}</span>
                                           )}
                                         </div>
                                       </div>

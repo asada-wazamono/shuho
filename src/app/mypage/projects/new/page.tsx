@@ -32,6 +32,8 @@ export default function NewProjectPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [sessionDept, setSessionDept] = useState<string>("");
+  const [sessionRole, setSessionRole] = useState<string>("");
+  const isFromAdmin = searchParams.get("from") === "admin";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   // URL から来た場合はモーダルを出さないフラグ
@@ -73,6 +75,7 @@ export default function NewProjectPage() {
       .then((data) => {
         setSessionUserId(data?.user?.id ?? null);
         setSessionDept(data?.user?.department ?? "");
+        setSessionRole(data?.user?.role ?? "");
       })
       .catch(() => {});
   }, []);
@@ -84,7 +87,7 @@ export default function NewProjectPage() {
       ...f,
       assignees: f.assignees.some((a) => a.userId === sessionUserId)
         ? f.assignees
-        : [...f.assignees, { userId: sessionUserId, involvement: "MAIN" as Involvement }],
+        : [...f.assignees, { userId: sessionUserId, involvement: "SUB" as Involvement }],
       ownerDepartment: f.ownerDepartment || sessionDept,
     }));
   }, [sessionUserId, sessionDept]);
@@ -133,7 +136,7 @@ export default function NewProjectPage() {
       const res = await fetch(`/api/projects/${projectId}/join`, { method: "POST" });
       if (res.ok) {
         setShowExistingModal(false);
-        router.push("/mypage");
+        router.push(isFromAdmin ? "/admin" : "/mypage");
         router.refresh();
       }
     } catch {
@@ -170,7 +173,7 @@ export default function NewProjectPage() {
         return data;
       })
       .then(() => {
-        router.push("/mypage");
+        router.push(isFromAdmin ? "/admin" : "/mypage");
         router.refresh();
       })
       .catch((err) => {
@@ -191,10 +194,10 @@ export default function NewProjectPage() {
       <p className="mb-4">
         <button
           type="button"
-          onClick={() => router.push("/mypage")}
+          onClick={() => router.push(isFromAdmin ? "/admin" : "/mypage")}
           className="text-sm text-amber-700 hover:underline"
         >
-          ← マイページへ戻る
+          {isFromAdmin ? "← 管理画面へ戻る" : "← マイページへ戻る"}
         </button>
       </p>
       <h1 className="mb-6 text-xl font-bold text-stone-800">新規案件入力</h1>
@@ -312,13 +315,29 @@ export default function NewProjectPage() {
                     <input
                       type="checkbox"
                       checked={checked}
-                      disabled={isSelf}
+                      disabled={isSelf && !isFromAdmin}
                       onChange={(e) => {
                         setForm((f) => {
                           if (e.target.checked) {
-                            return { ...f, assignees: [...f.assignees, { userId: u.id, involvement: "SUB" as Involvement }] };
+                            let newAssignees = [...f.assignees, { userId: u.id, involvement: "SUB" as Involvement }];
+                            // 管理者セッション：非admin担当者が追加されたら管理者を自動で外す
+                            if (sessionRole === "admin" && sessionUserId && u.id !== sessionUserId) {
+                              newAssignees = newAssignees.filter((a) => a.userId !== sessionUserId);
+                            }
+                            return { ...f, assignees: newAssignees };
                           } else {
-                            return { ...f, assignees: f.assignees.filter((a) => a.userId !== u.id) };
+                            const newAssignees = f.assignees.filter((a) => a.userId !== u.id);
+                            // 管理者セッション：非admin担当者が全員外れたら管理者を自動で戻す
+                            if (sessionRole === "admin" && sessionUserId) {
+                              const hasNonAdmin = newAssignees.some((a) => {
+                                const usr = users.find((us) => us.id === a.userId);
+                                return usr?.role !== "admin";
+                              });
+                              if (!hasNonAdmin) {
+                                newAssignees.push({ userId: sessionUserId, involvement: "MAIN" as Involvement });
+                              }
+                            }
+                            return { ...f, assignees: newAssignees };
                           }
                         });
                       }}
@@ -351,7 +370,9 @@ export default function NewProjectPage() {
             </div>
           </div>
           <p className="mt-1 text-xs text-stone-500">
-            自分は固定で担当者に含まれます（外せません）。関わり度：高=メイン、中=サブ、低=アドバイス
+            {isFromAdmin
+              ? "担当者を選ぶと管理者が自動で外れます。全員外すと管理者に戻ります。関わり度：高=メイン、中=サブ、低=アドバイス"
+              : "自分は固定で担当者に含まれます（外せません）。関わり度：高=メイン、中=サブ、低=アドバイス"}
           </p>
         </div>
 

@@ -17,7 +17,7 @@ export function currentFiscalYear(): number {
 /** 会計年度の開始日・終了日を返す */
 export function fiscalYearRange(fy: number): { start: Date; end: Date } {
   return {
-    start: new Date(`${fy}-04-01T00:00:00.000Z`),
-    end:   new Date(`${fy + 1}-03-31T23:59:59.999Z`),
+    start: new Date(`${fy}-04-01T00:00:00.000+09:00`),
+    end:   new Date(`${fy + 1}-03-31T23:59:59.999+09:00`),
   };
 }

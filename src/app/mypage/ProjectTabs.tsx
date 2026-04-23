@@ -37,6 +37,7 @@ type Project = {
   periodStart: string | null;
   note: string | null;
   proposalStatus: string | null;
+  proposalStatusUpdatedAt: string | null;
   projectStatus: string | null;
   badReason: string | null;
   createdAt: string;
@@ -346,7 +347,8 @@ export function ProjectTabs() {
             <thead>
               <tr className="border-b border-stone-200 text-stone-600">
                 <SortTh sortK="createdAt" label="追加日" {...sortProps} />
-                <th className="p-2">ステータス</th>
+                <th className="p-2">結果</th>
+                <th className="p-2">提案状況</th>
                 <SortTh sortK="client" label="クライアント" {...sortProps} />
                 <SortTh sortK="name" label="案件名" {...sortProps} />
                 <SortTh sortK="projectType" label="種別" {...sortProps} />
@@ -361,7 +363,7 @@ export function ProjectTabs() {
             </thead>
             <tbody>
               {sorted.map((p) => {
-                const elapsedDays = elapsedDaysFrom(p.statusUpdatedAt);
+                const elapsedDays = elapsedDaysFrom(p.proposalStatusUpdatedAt);
                 const isStale = elapsedDays != null && elapsedDays >= 14;
                 const statusLabel = p.proposalStatus
                   ? (PROPOSAL_STATUS_LABELS[p.proposalStatus as keyof typeof PROPOSAL_STATUS_LABELS] ?? p.proposalStatus)
@@ -370,18 +372,18 @@ export function ProjectTabs() {
                   <tr key={p.id} className={`border-b border-stone-100 hover:bg-stone-50 ${isStale ? "bg-red-50" : ""}`}>
                     <td className="p-2">{new Date(p.createdAt).toLocaleDateString("ja")}</td>
                     <td className="p-2">
-                      <div className="flex flex-col gap-0.5">
-                        <select
-                          value={p.status}
-                          onChange={(e) => handleStatusChange(p, e.target.value)}
-                          className="rounded border border-stone-300 bg-white px-2 py-1 text-xs"
-                        >
-                          <option value="undecided">未定</option>
-                          <option value="good">Good</option>
-                          <option value="bad">Bad</option>
-                        </select>
-                        <span className="text-xs text-stone-400">{statusLabel}</span>
-                      </div>
+                      <select
+                        value={p.status}
+                        onChange={(e) => handleStatusChange(p, e.target.value)}
+                        className="rounded border border-stone-300 bg-white px-2 py-1 text-xs"
+                      >
+                        <option value="undecided">未定</option>
+                        <option value="good">Good</option>
+                        <option value="bad">Bad</option>
+                      </select>
+                    </td>
+                    <td className="p-2">
+                      <span className="text-xs text-stone-600">{statusLabel}</span>
                     </td>
                     <td className="p-2">{p.client.name}</td>
                     <td className="p-2">
@@ -405,8 +407,8 @@ export function ProjectTabs() {
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 text-stone-600">
-                <th className="p-2">クライアント</th>
-                <th className="p-2">案件名</th>
+                <SortTh sortK="client" label="クライアント" {...sortProps} />
+                <SortTh sortK="name"   label="案件名" {...sortProps} />
                 <th className="p-2">子案件名</th>
                 <th className="p-2">状況</th>
                 <th className="p-2">部門予算</th>
@@ -549,8 +551,8 @@ export function ProjectTabs() {
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 text-stone-600">
-                <th className="p-2">クライアント</th>
-                <th className="p-2">案件名</th>
+                <SortTh sortK="client" label="クライアント" {...sortProps} />
+                <SortTh sortK="name"   label="案件名" {...sortProps} />
                 <th className="p-2">子案件名</th>
                 <th className="p-2">部門予算</th>
                 <th className="p-2">実施期間</th>

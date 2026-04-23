@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 
-type Client = { id: string; name: string; department: string | null; note: string | null };
+type Client = { id: string; clientCode: string | null; name: string; department: string | null; note: string | null };
 
 export default function AdminClientsPage() {
   const [list, setList] = useState<Client[]>([]);
@@ -10,12 +10,14 @@ export default function AdminClientsPage() {
 
   // 新規追加フォーム
   const [showForm, setShowForm] = useState(false);
+  const [clientCode, setClientCode] = useState("");
   const [name, setName] = useState("");
   const [department, setDepartment] = useState("");
   const [note, setNote] = useState("");
 
   // インライン編集
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editClientCode, setEditClientCode] = useState("");
   const [editName, setEditName] = useState("");
   const [editDepartment, setEditDepartment] = useState("");
   const [editNote, setEditNote] = useState("");
@@ -33,6 +35,7 @@ export default function AdminClientsPage() {
 
   function startEdit(c: Client) {
     setEditingId(c.id);
+    setEditClientCode(c.clientCode ?? "");
     setEditName(c.name);
     setEditDepartment(c.department ?? "");
     setEditNote(c.note ?? "");
@@ -49,6 +52,7 @@ export default function AdminClientsPage() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        clientCode: editClientCode.trim() || null,
         name: editName.trim(),
         department: editDepartment.trim() || null,
         note: editNote.trim() || null,
@@ -70,12 +74,13 @@ export default function AdminClientsPage() {
     const res = await fetch("/api/clients", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), department: department.trim() || null, note: note.trim() || null }),
+      body: JSON.stringify({ clientCode: clientCode.trim(), name: name.trim(), department: department.trim() || null, note: note.trim() || null }),
     });
     const data = await res.json();
     if (data.error) {
       alert(data.error);
     } else {
+      setClientCode("");
       setName("");
       setDepartment("");
       setNote("");
@@ -107,6 +112,16 @@ export default function AdminClientsPage() {
         <form onSubmit={handleAdd} className="rounded border border-stone-200 bg-white p-6 shadow-sm">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
+              <label className="mb-1 block text-sm text-stone-600">クライアントコード *</label>
+              <input
+                value={clientCode}
+                onChange={(e) => setClientCode(e.target.value)}
+                className="w-full rounded border border-stone-300 px-3 py-2"
+                placeholder="例: 100019"
+                required
+              />
+            </div>
+            <div>
               <label className="mb-1 block text-sm text-stone-600">クライアント名 *</label>
               <input
                 value={name}
@@ -123,7 +138,7 @@ export default function AdminClientsPage() {
                 className="w-full rounded border border-stone-300 px-3 py-2"
               />
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <label className="mb-1 block text-sm text-stone-600">備考</label>
               <input
                 value={note}
@@ -145,6 +160,7 @@ export default function AdminClientsPage() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50 text-stone-600">
+                <th className="p-3 w-28">コード</th>
                 <th className="p-3">クライアント名</th>
                 <th className="p-3">部門</th>
                 <th className="p-3">備考</th>
@@ -154,8 +170,15 @@ export default function AdminClientsPage() {
             <tbody>
               {list.map((c) =>
                 editingId === c.id ? (
-                  // 編集行
                   <tr key={c.id} className="border-b border-amber-100 bg-amber-50">
+                    <td className="p-2">
+                      <input
+                        value={editClientCode}
+                        onChange={(e) => setEditClientCode(e.target.value)}
+                        className="w-full rounded border border-amber-300 px-2 py-1 text-sm"
+                        placeholder="コード"
+                      />
+                    </td>
                     <td className="p-2">
                       <input
                         value={editName}
@@ -201,8 +224,8 @@ export default function AdminClientsPage() {
                     </td>
                   </tr>
                 ) : (
-                  // 通常行
                   <tr key={c.id} className="border-b border-stone-100 hover:bg-stone-50">
+                    <td className="p-3 text-stone-500 font-mono text-xs">{c.clientCode ?? "-"}</td>
                     <td className="p-3 font-medium text-stone-800">{c.name}</td>
                     <td className="p-3 text-stone-600">{c.department ?? "-"}</td>
                     <td className="max-w-[220px] truncate p-3 text-stone-600">{c.note ?? "-"}</td>
@@ -229,7 +252,7 @@ export default function AdminClientsPage() {
               )}
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-4 text-center text-stone-400">
+                  <td colSpan={5} className="p-4 text-center text-stone-400">
                     クライアントがありません
                   </td>
                 </tr>

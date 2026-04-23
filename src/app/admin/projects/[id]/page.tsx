@@ -58,6 +58,7 @@ type Project = {
   statusUpdatedAt: string | null;
   assignees: { userId: string; involvement: string; user: { id: string; name: string; department: string } }[];
   subProjects: SubProject[];
+  mergedProjects: { id: string; name: string; status: string }[];
 };
 
 export default function AdminProjectDetailPage() {
@@ -70,6 +71,43 @@ export default function AdminProjectDetailPage() {
   const [savedMessage, setSavedMessage] = useState("");
   const [users, setUsers] = useState<{ id: string; name: string; department: string }[]>([]);
   const [assigneesTouched, setAssigneesTouched] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+
+  function addAssignee(userId: string) {
+    setAssigneesTouched(true);
+    setForm((f) => {
+      if (f.assignees.some((a) => a.userId === userId)) return f;
+      return { ...f, assignees: [...f.assignees, { userId, involvement: "SUB" as Involvement }] };
+    });
+  }
+  function removeAssignee(userId: string) {
+    setAssigneesTouched(true);
+    setForm((f) => ({ ...f, assignees: f.assignees.filter((a) => a.userId !== userId) }));
+  }
+  function updateInvolvement(userId: string, inv: Involvement) {
+    setAssigneesTouched(true);
+    setForm((f) => ({
+      ...f,
+      assignees: f.assignees.map((a) => a.userId === userId ? { ...a, involvement: inv } : a),
+    }));
+  }
+
+  async function handleNameSave() {
+    const trimmed = nameInput.trim();
+    if (!trimmed || !project || trimmed === project.name) { setEditingName(false); return; }
+    const res = await fetch(`/api/projects/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    if (res.ok) {
+      setProject((p) => p ? { ...p, name: trimmed } : p);
+      setSavedMessage("案件名を変更しました");
+      setTimeout(() => setSavedMessage(""), 2000);
+    }
+    setEditingName(false);
+  }
 
   type AssigneeEntry = { userId: string; involvement: Involvement };
   const [form, setForm] = useState({
@@ -162,12 +200,9 @@ export default function AdminProjectDetailPage() {
       if (!res.ok) throw new Error(data.error || "更新に失敗しました");
 
       loadProject(data);
-      setSavedMessage("更新しました");
+      setSavedMessage("保存しました");
       setAssigneesTouched(false);
-      setTimeout(() => {
-        router.push(`/admin?tab=${targetTab(data.status)}`);
-        router.refresh();
-      }, 400);
+      setTimeout(() => setSavedMessage(""), 2000);
     } catch (e) {
       alert(e instanceof Error ? e.message : "更新に失敗しました");
     } finally {
@@ -184,6 +219,20 @@ export default function AdminProjectDetailPage() {
     router.refresh();
   }
 
+  async function handleUnmerge(absorbedId: string, absorbedName: string) {
+    if (!confirm(`「${absorbedName}」との統合を解除しますか？\n解除後は別々の案件として扱われます。`)) return;
+    const res = await fetch(`/api/admin/projects/${absorbedId}/merge`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || "解除に失敗しました"); return; }
+    // 再読み込みして mergedProjects を更新
+    fetch(`/api/projects/${id}`)
+      .then((r) => r.json())
+      .then(loadProject)
+      .catch(() => {});
+    setSavedMessage("統合を解除しました");
+    setTimeout(() => setSavedMessage(""), 2000);
+  }
+
   if (!project) return <p className="p-4 text-stone-500">読み込み中…</p>;
 
   const subProjectTotalBudget = project.subProjects.reduce(
@@ -197,7 +246,24 @@ export default function AdminProjectDetailPage() {
         <Link href="/admin?tab=decided" className="text-sm text-stone-500 hover:underline">決定案件一覧</Link>
         <Link href="/admin?tab=bad" className="text-sm text-stone-500 hover:underline">Bad案件一覧</Link>
       </div>
-      <h1 className="text-xl font-bold text-stone-800">{project.name}</h1>
+      {editingName ? (
+        <input
+          autoFocus
+          value={nameInput}
+          onChange={(e) => setNameInput(e.target.value)}
+          onBlur={handleNameSave}
+          onKeyDown={(e) => { if (e.key === "Enter") handleNameSave(); if (e.key === "Escape") setEditingName(false); }}
+          className="w-full rounded border border-amber-400 px-2 py-1 text-xl font-bold text-stone-800 focus:outline-none"
+        />
+      ) : (
+        <h1
+          className="cursor-pointer text-xl font-bold text-stone-800 hover:text-amber-700"
+          title="クリックして案件名を変更"
+          onClick={() => { setNameInput(project.name); setEditingName(true); }}
+        >
+          {project.name} <span className="text-sm font-normal text-stone-400">✎</span>
+        </h1>
+      )}
 
       {/* 編集フォーム */}
       <div className="rounded border border-stone-200 bg-white p-6 shadow-sm">
@@ -248,57 +314,33 @@ export default function AdminProjectDetailPage() {
               </select>
             </div>
 
-            {/* 担当者 */}
+            {/* 担当者（追加型） */}
             <div>
               <label className="mb-1 block text-sm font-medium text-stone-700">担当者</label>
-              <div className="rounded border border-stone-300 bg-white p-3">
-                <div className="space-y-2">
-                  {users.map((u) => {
-                    const entry = form.assignees.find((a) => a.userId === u.id);
-                    const checked = !!entry;
-                    return (
-                      <div key={u.id} className="flex items-center gap-3 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            setAssigneesTouched(true);
-                            setForm((f) => {
-                              if (e.target.checked) {
-                                return { ...f, assignees: [...f.assignees, { userId: u.id, involvement: "SUB" as Involvement }] };
-                              } else {
-                                return { ...f, assignees: f.assignees.filter((a) => a.userId !== u.id) };
-                              }
-                            });
-                          }}
-                        />
-                        <span className="w-36 shrink-0">{u.department} / {u.name}</span>
-                        {checked && (
-                          <label className="flex items-center gap-1 text-xs text-stone-500">
-                            関わり度：
-                            <select
-                              value={entry.involvement}
-                              onChange={(e) => {
-                                setAssigneesTouched(true);
-                                setForm((f) => ({
-                                  ...f,
-                                  assignees: f.assignees.map((a) =>
-                                    a.userId === u.id ? { ...a, involvement: e.target.value as Involvement } : a
-                                  ),
-                                }));
-                              }}
-                              className="rounded border border-stone-300 px-2 py-0.5 text-xs"
-                            >
-                              {INVOLVEMENT_OPTIONS.map((inv) => (
-                                <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="space-y-1.5">
+                {form.assignees.map((a) => {
+                  const u = users.find((u) => u.id === a.userId);
+                  if (!u) return null;
+                  return (
+                    <div key={a.userId} className="flex items-center justify-between rounded border border-stone-200 bg-white px-3 py-2 text-sm">
+                      <span>{u.department} / {u.name}</span>
+                      <button type="button" onClick={() => removeAssignee(u.id)} className="text-xs text-red-400 hover:text-red-600">削除</button>
+                    </div>
+                  );
+                })}
+                {users.filter((u) => !form.assignees.some((a) => a.userId === u.id)).length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) { addAssignee(e.target.value); e.currentTarget.value = ""; } }}
+                    className="w-full rounded border border-stone-300 bg-white px-3 py-2 text-sm text-stone-500"
+                  >
+                    <option value="">＋ 担当者を追加</option>
+                    {users
+                      .filter((u) => !form.assignees.some((a) => a.userId === u.id))
+                      .map((u) => <option key={u.id} value={u.id}>{u.department} / {u.name}</option>)
+                    }
+                  </select>
+                )}
               </div>
             </div>
 
@@ -464,57 +506,45 @@ export default function AdminProjectDetailPage() {
               </select>
             </div>
 
-            {/* 担当者 */}
+            {/* 担当者（追加型・関わり度あり） */}
             <div>
               <label className="mb-1 block text-sm font-medium text-stone-700">担当者</label>
-              <div className="rounded border border-stone-300 bg-white p-3">
-                <div className="space-y-2">
-                  {users.map((u) => {
-                    const entry = form.assignees.find((a) => a.userId === u.id);
-                    const checked = !!entry;
-                    return (
-                      <div key={u.id} className="flex items-center gap-3 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            setAssigneesTouched(true);
-                            setForm((f) => {
-                              if (e.target.checked) {
-                                return { ...f, assignees: [...f.assignees, { userId: u.id, involvement: "SUB" as Involvement }] };
-                              } else {
-                                return { ...f, assignees: f.assignees.filter((a) => a.userId !== u.id) };
-                              }
-                            });
-                          }}
-                        />
-                        <span className="w-36 shrink-0">{u.department} / {u.name}</span>
-                        {checked && (
-                          <label className="flex items-center gap-1 text-xs text-stone-500">
-                            関わり度：
-                            <select
-                              value={entry.involvement}
-                              onChange={(e) => {
-                                setAssigneesTouched(true);
-                                setForm((f) => ({
-                                  ...f,
-                                  assignees: f.assignees.map((a) =>
-                                    a.userId === u.id ? { ...a, involvement: e.target.value as Involvement } : a
-                                  ),
-                                }));
-                              }}
-                              className="rounded border border-stone-300 px-2 py-0.5 text-xs"
-                            >
-                              {INVOLVEMENT_OPTIONS.map((inv) => (
-                                <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="space-y-1.5">
+                {form.assignees.map((a) => {
+                  const u = users.find((u) => u.id === a.userId);
+                  if (!u) return null;
+                  return (
+                    <div key={a.userId} className="flex items-center gap-2 rounded border border-stone-200 bg-white px-3 py-2 text-sm">
+                      <span className="flex-1">{u.department} / {u.name}</span>
+                      <label className="flex items-center gap-1 text-xs text-stone-500">
+                        関わり度：
+                        <select
+                          value={a.involvement}
+                          onChange={(e) => updateInvolvement(u.id, e.target.value as Involvement)}
+                          className="rounded border border-stone-300 px-2 py-0.5 text-xs"
+                        >
+                          {INVOLVEMENT_OPTIONS.map((inv) => (
+                            <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button type="button" onClick={() => removeAssignee(u.id)} className="text-xs text-red-400 hover:text-red-600">削除</button>
+                    </div>
+                  );
+                })}
+                {users.filter((u) => !form.assignees.some((a) => a.userId === u.id)).length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) { addAssignee(e.target.value); e.currentTarget.value = ""; } }}
+                    className="w-full rounded border border-stone-300 bg-white px-3 py-2 text-sm text-stone-500"
+                  >
+                    <option value="">＋ 担当者を追加</option>
+                    {users
+                      .filter((u) => !form.assignees.some((a) => a.userId === u.id))
+                      .map((u) => <option key={u.id} value={u.id}>{u.department} / {u.name}</option>)
+                    }
+                  </select>
+                )}
               </div>
             </div>
 
@@ -591,6 +621,27 @@ export default function AdminProjectDetailPage() {
           </Link>
         </div>
       </div>
+
+      {/* 統合済み案件セクション */}
+      {project.mergedProjects && project.mergedProjects.length > 0 && (
+        <div className="rounded border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <h2 className="mb-3 text-sm font-bold text-amber-800">統合済みの案件（{project.mergedProjects.length}件）</h2>
+          <div className="space-y-2">
+            {project.mergedProjects.map((mp) => (
+              <div key={mp.id} className="flex items-center justify-between rounded border border-amber-200 bg-white px-4 py-2">
+                <span className="text-sm text-stone-700">{mp.name}</span>
+                <button
+                  onClick={() => handleUnmerge(mp.id, mp.name)}
+                  className="rounded border border-stone-300 px-3 py-1 text-xs text-stone-600 hover:bg-stone-100"
+                >
+                  統合を解除
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-amber-700">※ 解除すると元の案件として一覧に戻ります</p>
+        </div>
+      )}
 
       {/* 子案件セクション（Good確定後に表示） */}
       {project.status === "good" && (

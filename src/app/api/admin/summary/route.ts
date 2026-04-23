@@ -1,12 +1,15 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentFiscalYear, fiscalYearRange } from "@/lib/fiscalYear";
 import { calcSubProjectLoads, calcProposalLoad } from "@/lib/loadScore";
 import { DEPARTMENTS, getLoadLabel, type Involvement } from "@/lib/constants";
 
 export type DecidedEntry = {
   subProjectId: string;
   subProjectName: string;
+  parentProjectId: string;
   parentProjectName: string;
+  clientName: string;
   involvement: string;
   load: number;
   departmentBudget: number | null;
@@ -74,24 +77,27 @@ function calcPctMap(rows: { userId: string; load: number }[]): Map<string, numbe
   return map;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getSession();
   if (!session || session.role !== "admin") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const fyParam = searchParams.get("fy");
+  const fy = fyParam ? parseInt(fyParam, 10) : currentFiscalYear();
+  const { start, end } = fiscalYearRange(fy);
+
   const users = await prisma.user.findMany({
-    where: { role: "staff" },
     select: { id: true, name: true, department: true },
   });
 
   const subProjects = await prisma.subProject.findMany({
     where: {
-      status: "active",
       parent: { status: "good", mergedIntoId: null },
     },
     include: {
-      parent: { select: { id: true, name: true, ownerDepartment: true, departmentBudget: true, optionalAmount: true } },
+      parent: { select: { id: true, name: true, ownerDepartment: true, departmentBudget: true, optionalAmount: true, client: { select: { name: true } } } },
       assignees: { include: { user: { select: { id: true, name: true, department: true } } } },
     },
   });
@@ -107,50 +113,72 @@ export async function GET() {
     };
   }
 
-  // 部署別売上集計
+  // 部署別売上集計（会計年度フィルター：periodStart が FY 内の子案件のみ）
   const byDept: Record<string, { sales: number; count: number }> = {};
   for (const d of DEPARTMENTS) byDept[d] = { sales: 0, count: 0 };
 
-  const goodProjects = await prisma.project.findMany({
-    where: { status: "good", mergedIntoId: null },
-    include: {
-      subProjects: { select: { departmentBudget: true } },
-      duplicateGroup: { include: { projects: { select: { id: true, isPrimaryInGroup: true } } } },
+  const fySubProjects = await prisma.subProject.findMany({
+    where: {
+      parent: { status: "good", mergedIntoId: null },
+      periodStart: { gte: start, lte: end },
+    },
+    select: {
+      departmentBudget: true,
+      parent: {
+        select: {
+          id: true,
+          ownerDepartment: true,
+          isPrimaryInGroup: true,
+          duplicateGroupId: true,
+        },
+      },
     },
   });
 
-  for (const p of goodProjects) {
+  const countedProjectIds = new Set<string>();
+  for (const sp of fySubProjects) {
+    const p = sp.parent;
     if (p.duplicateGroupId && !p.isPrimaryInGroup) continue;
     const dept = p.ownerDepartment;
-    const subBudget = p.subProjects.length > 0
-      ? p.subProjects.reduce((s, sp) => s + (sp.departmentBudget ?? 0), 0)
-      : (p.departmentBudget ?? 0);
     if (byDept[dept]) {
-      byDept[dept].sales += subBudget;
-      byDept[dept].count += 1;
+      byDept[dept].sales += sp.departmentBudget ?? 0;
+      if (!countedProjectIds.has(p.id)) {
+        byDept[dept].count += 1;
+        countedProjectIds.add(p.id);
+      }
     }
   }
 
   // 担当者別 決定負荷・予算集計
+  // 負荷は進行中の子案件のみ、売上（予算）は完了済みも含めて集計する
   for (const sp of subProjects) {
-    const loads = calcSubProjectLoads(
-      sp.assignees.map((a) => ({ userId: a.userId, involvement: a.involvement as Involvement }))
-    );
+    const isActive = sp.status === "active";
+    const loads = isActive
+      ? calcSubProjectLoads(
+          sp.assignees.map((a) => ({ userId: a.userId, involvement: a.involvement as Involvement }))
+        )
+      : {};
     for (const a of sp.assignees) {
       const target = userAgg[a.userId];
       if (!target) continue;
-      const load = loads[a.userId] ?? 0;
-      target.decidedLoad += load;
+      // 売上は完了済みも含める
       target.decidedBudget += sp.departmentBudget ?? 0;
-      target.subProjectCount += 1;
-      target.decidedEntries.push({
-        subProjectId: sp.id,
-        subProjectName: sp.name,
-        parentProjectName: sp.parent.name,
-        involvement: a.involvement,
-        load,
-        departmentBudget: sp.departmentBudget,
-      });
+      // 負荷・件数・エントリーは進行中のみ
+      if (isActive) {
+        const load = loads[a.userId] ?? 0;
+        target.decidedLoad += load;
+        target.subProjectCount += 1;
+        target.decidedEntries.push({
+          subProjectId: sp.id,
+          subProjectName: sp.name,
+          parentProjectId: sp.parent.id,
+          parentProjectName: sp.parent.name,
+          clientName: sp.parent.client.name,
+          involvement: a.involvement,
+          load,
+          departmentBudget: sp.departmentBudget,
+        });
+      }
     }
   }
 
@@ -217,7 +245,8 @@ export async function GET() {
     };
   }).sort((a, b) => b.totalLoad - a.totalLoad);
 
-  // 総合スコア（決定70% + 提案30% のパーセンタイル合成）
+  // 総合スコア（合計負荷のパーセンタイル）
+  const totalPctMap = calcPctMap(baseRows.map(r => ({ userId: r.userId, load: r.totalLoad })));
   const decidedPctMap = calcPctMap(baseRows.map(r => ({ userId: r.userId, load: r.decidedLoad })));
   const proposalPctMap = calcPctMap(baseRows.map(r => ({ userId: r.userId, load: r.proposalLoad })));
 
@@ -266,7 +295,7 @@ export async function GET() {
   const assigneeRanking = rowsWithCompany.map((r) => {
     const decidedPct = decidedPctMap.get(r.userId) ?? 0;
     const proposalPct = proposalPctMap.get(r.userId) ?? 0;
-    const compositeScore = Math.round(decidedPct * 0.6 + proposalPct * 0.4);
+    const compositeScore = totalPctMap.get(r.userId) ?? 0;
     return {
       userId: r.userId,
       name: r.name,
@@ -292,7 +321,8 @@ export async function GET() {
   });
 
   return Response.json({
-    totalCount: goodProjects.length,
+    fy,
+    totalCount: countedProjectIds.size,
     totalSales,
     departmentSummary,
     assigneeRanking,

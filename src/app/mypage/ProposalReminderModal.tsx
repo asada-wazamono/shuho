@@ -37,7 +37,8 @@ export function ProposalReminderModal() {
 
   async function handleSave(projectId: string) {
     const proposalStatus = statusMap[projectId];
-    if (!proposalStatus || proposalStatus === "preparing") return;
+    const original = items.find((i) => i.id === projectId)?.proposalStatus;
+    if (!proposalStatus || proposalStatus === original) return;
     setSavingId(projectId);
     try {
       const r = await fetch("/api/mypage/proposal-reminders", {
@@ -64,8 +65,8 @@ export function ProposalReminderModal() {
         <div className="flex items-start gap-3 rounded-t-xl bg-amber-50 px-6 py-4 border-b border-amber-200">
           <span className="text-xl">⚠️</span>
           <div>
-            <p className="font-bold text-stone-800">提案日を過ぎた案件があります（{items.length}件）</p>
-            <p className="text-xs text-stone-500 mt-0.5">ステータスを更新してください</p>
+            <p className="font-bold text-stone-800">提案後1週間が経過した案件があります（{items.length}件）</p>
+            <p className="text-xs text-stone-500 mt-0.5">その後どうなりましたか？ステータスを更新してください</p>
           </div>
         </div>
 
@@ -93,17 +94,17 @@ export function ProposalReminderModal() {
                 ) : (
                   <div className="flex items-center gap-2">
                     <select
-                      value={statusMap[item.id] ?? "preparing"}
+                      value={statusMap[item.id] ?? "waiting_response"}
                       onChange={(e) => setStatusMap((prev) => ({ ...prev, [item.id]: e.target.value }))}
                       className="flex-1 rounded border border-stone-300 bg-white px-2 py-1.5 text-sm"
                     >
-                      {PROPOSAL_STATUS_OPTIONS.map((s) => (
+                      {PROPOSAL_STATUS_OPTIONS.filter((s) => s !== "preparing").map((s) => (
                         <option key={s} value={s}>{PROPOSAL_STATUS_LABELS[s]}</option>
                       ))}
                     </select>
                     <button
                       onClick={() => handleSave(item.id)}
-                      disabled={savingId === item.id || statusMap[item.id] === "preparing"}
+                      disabled={savingId === item.id || statusMap[item.id] === item.proposalStatus}
                       className="rounded bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {savingId === item.id ? "保存中…" : "更新"}

@@ -24,6 +24,7 @@ type SubProject = {
   businessContent: string | null;
   periodStart: string | null;
   periodEnd: string | null;
+  note: string | null;
   parent: { id: string; name: string; client: { name: string } };
   assignees: {
     userId: string;
@@ -51,6 +52,7 @@ export default function SubProjectDetailPage() {
     businessContent: "",
     periodStart: "",
     periodEnd: "",
+    note: "",
   });
   const [assignees, setAssignees] = useState<AssigneeEntry[]>([]);
 
@@ -63,6 +65,7 @@ export default function SubProjectDetailPage() {
       businessContent: data.businessContent ?? "",
       periodStart: data.periodStart ? data.periodStart.slice(0, 10) : "",
       periodEnd: data.periodEnd ? data.periodEnd.slice(0, 10) : "",
+      note: data.note ?? "",
     });
     setAssignees(
       data.assignees.map((a) => ({
@@ -83,16 +86,17 @@ export default function SubProjectDetailPage() {
       .catch(() => setUsers([]));
   }, [id]);
 
-  function addAssignee() {
-    setAssignees((prev) => [...prev, { userId: "", involvement: "MAIN" }]);
+  function addAssignee(userId: string) {
+    if (!userId || assignees.some((a) => a.userId === userId)) return;
+    setAssignees((prev) => [...prev, { userId, involvement: "SUB" }]);
   }
 
-  function removeAssignee(idx: number) {
-    setAssignees((prev) => prev.filter((_, i) => i !== idx));
+  function removeAssignee(userId: string) {
+    setAssignees((prev) => prev.filter((a) => a.userId !== userId));
   }
 
-  function updateAssignee(idx: number, field: keyof AssigneeEntry, value: string | number) {
-    setAssignees((prev) => prev.map((a, i) => (i === idx ? { ...a, [field]: value } : a)));
+  function updateInvolvement(userId: string, inv: Involvement) {
+    setAssignees((prev) => prev.map((a) => a.userId === userId ? { ...a, involvement: inv } : a));
   }
 
 
@@ -115,6 +119,7 @@ export default function SubProjectDetailPage() {
           businessContent: form.businessContent || null,
           periodStart: form.periodStart || null,
           periodEnd: form.periodEnd || null,
+          note: form.note || null,
           assignees: assignees.filter((a) => a.userId),
         }),
       });
@@ -143,18 +148,11 @@ export default function SubProjectDetailPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="mb-2 flex items-center gap-4">
-        <Link
-          href={`/mypage/projects/${subProject.parent.id}`}
-          className="text-sm text-amber-700 hover:underline"
-        >
+        <Link href={`/mypage/projects/${subProject.parent.id}`} className="text-sm text-amber-700 hover:underline">
           ← {subProject.parent.name} へ戻る
         </Link>
-        <Link
-          href="/mypage?tab=decided"
-          className="text-sm text-stone-500 hover:underline"
-        >
-          決定案件一覧へ
-        </Link>
+        <Link href="/mypage?tab=decided" className="text-sm text-stone-500 hover:underline">決定案件一覧</Link>
+        <Link href="/mypage?tab=proposal" className="text-sm text-stone-500 hover:underline">提案案件一覧</Link>
       </div>
 
       <div>
@@ -233,50 +231,57 @@ export default function SubProjectDetailPage() {
           </div>
         </div>
 
-        {/* 担当者・負荷 */}
+        {/* 担当者・関わり度（追加型） */}
         <div>
-          <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium text-stone-700">担当者・負荷設定</label>
-            <button type="button" onClick={addAssignee} className="text-sm text-amber-700 hover:underline">
-              ＋ 追加
-            </button>
-          </div>
-          <div className="space-y-3">
-            {assignees.map((a, idx) => (
-              <div key={idx} className="rounded border border-stone-200 p-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs text-stone-500">担当者</label>
-                    <select
-                      value={a.userId}
-                      onChange={(e) => updateAssignee(idx, "userId", e.target.value)}
-                      className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
-                    >
-                      <option value="">選択</option>
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>{u.department} / {u.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-stone-500">関わり度</label>
+          <label className="mb-2 block text-sm font-medium text-stone-700">担当者・関わり度</label>
+          <div className="space-y-1.5">
+            {assignees.map((a) => {
+              const u = users.find((u) => u.id === a.userId);
+              if (!u) return null;
+              return (
+                <div key={a.userId} className="flex items-center gap-2 rounded border border-stone-200 bg-white px-3 py-2 text-sm">
+                  <span className="flex-1">{u.department} / {u.name}</span>
+                  <label className="flex items-center gap-1 text-xs text-stone-500">
+                    関わり度：
                     <select
                       value={a.involvement}
-                      onChange={(e) => updateAssignee(idx, "involvement", e.target.value as Involvement)}
-                      className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
+                      onChange={(e) => updateInvolvement(u.id, e.target.value as Involvement)}
+                      className="rounded border border-stone-300 px-2 py-0.5 text-xs"
                     >
                       {INVOLVEMENT_OPTIONS.map((inv) => (
                         <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
                       ))}
                     </select>
-                  </div>
+                  </label>
+                  <button type="button" onClick={() => removeAssignee(u.id)} className="text-xs text-red-400 hover:text-red-600">削除</button>
                 </div>
-                <div className="mt-2 flex justify-end">
-                  <button type="button" onClick={() => removeAssignee(idx)} className="text-xs text-red-500 hover:underline">削除</button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
+            {users.filter((u) => !assignees.some((a) => a.userId === u.id)).length > 0 && (
+              <select
+                value=""
+                onChange={(e) => { if (e.target.value) { addAssignee(e.target.value); e.currentTarget.value = ""; } }}
+                className="w-full rounded border border-stone-300 bg-white px-3 py-2 text-sm text-stone-500"
+              >
+                <option value="">＋ 担当者を追加</option>
+                {users
+                  .filter((u) => !assignees.some((a) => a.userId === u.id))
+                  .map((u) => <option key={u.id} value={u.id}>{u.department} / {u.name}</option>)
+                }
+              </select>
+            )}
           </div>
+        </div>
+
+        {/* 備考 */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-stone-700">備考</label>
+          <textarea
+            value={form.note}
+            onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+            rows={3}
+            className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
+          />
         </div>
 
         <div className="flex flex-wrap gap-3 border-t border-stone-200 pt-4">

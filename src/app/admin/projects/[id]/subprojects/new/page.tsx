@@ -10,7 +10,7 @@ import {
   type Involvement,
 } from "@/lib/constants";
 
-type User = { id: string; name: string; department: string };
+type User = { id: string; name: string; department: string; role: string };
 type AssigneeEntry = { userId: string; involvement: Involvement };
 
 export default function AdminNewSubProjectPage() {
@@ -19,6 +19,7 @@ export default function AdminNewSubProjectPage() {
   const parentId = String(params.id);
 
   const [parentName, setParentName] = useState("");
+  const [hasExistingSubProjects, setHasExistingSubProjects] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -34,61 +35,64 @@ export default function AdminNewSubProjectPage() {
   const [assignees, setAssignees] = useState<AssigneeEntry[]>([]);
 
   useEffect(() => {
-    fetch("/api/users")
-      .then((r) => r.json())
-      .then((list) => setUsers(Array.isArray(list) ? list : []))
-      .catch(() => setUsers([]));
-    fetch(`/api/projects/${parentId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setParentName(data.name ?? "");
-        const initial: AssigneeEntry[] = [];
-        if (Array.isArray(data.assignees)) {
-          for (const a of data.assignees) {
-            initial.push({
-              userId: a.user.id,
-              involvement: "MAIN" as Involvement,
-            });
+    Promise.all([
+      fetch("/api/auth/session").then((r) => r.json()),
+      fetch("/api/users").then((r) => r.json()),
+      fetch(`/api/projects/${parentId}`).then((r) => r.json()),
+    ])
+      .then(([session, userList, projectData]) => {
+        const sessionUserId: string | null = session?.user?.id ?? null;
+        setUsers(Array.isArray(userList) ? userList : []);
+        setParentName(projectData.name ?? "");
+        setHasExistingSubProjects(
+          Array.isArray(projectData.subProjects) && projectData.subProjects.length > 0
+        );
+
+        if (Array.isArray(projectData.assignees) && projectData.assignees.length > 0) {
+          // 親案件の担当者のうち「現在の管理者以外」を抽出
+          const others = projectData.assignees.filter(
+            (a: { user: { id: string } }) => a.user.id !== sessionUserId
+          );
+          if (others.length > 0) {
+            // 管理者以外の担当者がいる → 管理者は含めない
+            setAssignees(
+              others.map((a: { user: { id: string } }) => ({
+                userId: a.user.id,
+                involvement: "SUB" as Involvement,
+              }))
+            );
+          } else {
+            // 管理者しかいない → そのまま含める
+            setAssignees(
+              projectData.assignees.map((a: { user: { id: string } }) => ({
+                userId: a.user.id,
+                involvement: "SUB" as Involvement,
+              }))
+            );
           }
         }
-        setAssignees(initial);
       })
       .catch(() => {});
   }, [parentId]);
 
-  function addAssignee() {
-    setAssignees((prev) => [
-      ...prev,
-      { userId: "", involvement: "MAIN" },
-    ]);
+  function addAssignee(userId: string) {
+    if (!userId || assignees.some((a) => a.userId === userId)) return;
+    setAssignees((prev) => [...prev, { userId, involvement: "SUB" as Involvement }]);
   }
 
-  function removeAssignee(idx: number) {
-    setAssignees((prev) => prev.filter((_, i) => i !== idx));
+  function removeAssignee(userId: string) {
+    setAssignees((prev) => prev.filter((a) => a.userId !== userId));
   }
 
-  function updateAssignee(idx: number, field: keyof AssigneeEntry, value: string | number) {
-    setAssignees((prev) =>
-      prev.map((a, i) => (i === idx ? { ...a, [field]: value } : a))
-    );
+  function updateInvolvement(userId: string, inv: Involvement) {
+    setAssignees((prev) => prev.map((a) => a.userId === userId ? { ...a, involvement: inv } : a));
   }
-
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     if (!form.departmentBudget) {
       setError("部門予算は必須です");
-      return;
-    }
-    const invalidAssignee = assignees.some((a) => !a.userId);
-    if (invalidAssignee) {
-      setError("担当者を選択してください");
-      return;
-    }
-    const userIds = assignees.filter((a) => a.userId).map((a) => a.userId);
-    if (new Set(userIds).size !== userIds.length) {
-      setError("同じ担当者が重複しています。担当者を確認してください。");
       return;
     }
     setLoading(true);
@@ -112,6 +116,7 @@ export default function AdminNewSubProjectPage() {
       if (continueAdding) {
         setForm({ name: "", businessContent: "", departmentBudget: "", periodStart: "", periodEnd: "" });
         setContinueAdding(false);
+        setHasExistingSubProjects(true); // 1件登録済みになった
       } else {
         router.push(`/admin/projects/${parentId}`);
         router.refresh();
@@ -126,30 +131,25 @@ export default function AdminNewSubProjectPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <p className="mb-4">
-        <Link
-          href={`/admin/projects/${parentId}`}
-          className="text-sm text-amber-700 hover:underline"
-        >
+        <Link href={`/admin/projects/${parentId}`} className="text-sm text-amber-700 hover:underline">
           ← {parentName || "親案件"} へ戻る
         </Link>
       </p>
       <h1 className="mb-1 text-xl font-bold text-stone-800">子案件を追加</h1>
-      {parentName && (
-        <p className="mb-4 text-sm text-stone-500">親案件：{parentName}</p>
+      {parentName && <p className="mb-2 text-sm text-stone-500">親案件：{parentName}</p>}
+
+      {/* 未登録の場合は必須メッセージ */}
+      {!hasExistingSubProjects && (
+        <p className="mb-4 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          ⚠ 決定案件には子案件を最低1件登録してください
+        </p>
       )}
 
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-5 rounded border border-stone-200 bg-white p-6 shadow-sm"
-      >
-        {error && (
-          <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>
-        )}
+      <form onSubmit={handleSubmit} className="space-y-5 rounded border border-stone-200 bg-white p-6 shadow-sm">
+        {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-stone-700">
-            プロジェクト名 *
-          </label>
+          <label className="mb-1 block text-sm font-medium text-stone-700">プロジェクト名 *</label>
           <input
             type="text"
             value={form.name}
@@ -191,8 +191,7 @@ export default function AdminNewSubProjectPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-700">
-              実施開始日
-              <span className="ml-1 text-xs font-normal text-stone-400">（日不明時は1日）</span>
+              実施開始日<span className="ml-1 text-xs font-normal text-stone-400">（日不明時は1日）</span>
             </label>
             <input
               type="date"
@@ -203,8 +202,7 @@ export default function AdminNewSubProjectPage() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-stone-700">
-              実施終了日
-              <span className="ml-1 text-xs font-normal text-stone-400">（日不明時は1日）</span>
+              実施終了日<span className="ml-1 text-xs font-normal text-stone-400">（日不明時は1日）</span>
             </label>
             <input
               type="date"
@@ -215,69 +213,52 @@ export default function AdminNewSubProjectPage() {
           </div>
         </div>
 
-        {/* 担当者アサイン */}
+        {/* 担当者（追加型） */}
         <div>
-          <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium text-stone-700">担当者・負荷設定</label>
-            <button
-              type="button"
-              onClick={addAssignee}
-              className="text-sm text-amber-700 hover:underline"
-            >
-              ＋ 担当者を追加
-            </button>
-          </div>
-
-          {assignees.length === 0 ? (
-            <p className="rounded border border-dashed border-stone-300 p-4 text-center text-sm text-stone-400">
-              「担当者を追加」から設定してください
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {assignees.map((a, idx) => (
-                <div key={idx} className="rounded border border-stone-200 p-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs text-stone-500">担当者 *</label>
-                      <select
-                        value={a.userId}
-                        onChange={(e) => updateAssignee(idx, "userId", e.target.value)}
-                        className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
-                      >
-                        <option value="">選択</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.department} / {u.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-stone-500">関わり度 *</label>
-                      <select
-                        value={a.involvement}
-                        onChange={(e) => updateAssignee(idx, "involvement", e.target.value as Involvement)}
-                        className="w-full rounded border border-stone-300 px-2 py-1.5 text-sm"
-                      >
-                        {INVOLVEMENT_OPTIONS.map((inv) => (
-                          <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => removeAssignee(idx)}
-                      className="text-xs text-red-500 hover:underline"
+          <label className="mb-2 block text-sm font-medium text-stone-700">担当者・関わり度</label>
+          <div className="space-y-1.5">
+            {assignees.map((a) => {
+              const u = users.find((u) => u.id === a.userId);
+              if (!u) return null;
+              return (
+                <div key={a.userId} className="flex items-center gap-2 rounded border border-stone-200 bg-white px-3 py-2 text-sm">
+                  <span className="flex-1">{u.department} / {u.name}</span>
+                  <label className="flex items-center gap-1 text-xs text-stone-500">
+                    関わり度：
+                    <select
+                      value={a.involvement}
+                      onChange={(e) => updateInvolvement(u.id, e.target.value as Involvement)}
+                      className="rounded border border-stone-300 px-2 py-0.5 text-xs"
                     >
-                      削除
-                    </button>
-                  </div>
+                      {INVOLVEMENT_OPTIONS.map((inv) => (
+                        <option key={inv} value={inv}>{INVOLVEMENT_LABELS[inv]}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeAssignee(u.id)}
+                    className="text-xs text-red-400 hover:text-red-600"
+                  >
+                    削除
+                  </button>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+            {users.filter((u) => !assignees.some((a) => a.userId === u.id)).length > 0 && (
+              <select
+                value=""
+                onChange={(e) => { if (e.target.value) { addAssignee(e.target.value); e.currentTarget.value = ""; } }}
+                className="w-full rounded border border-stone-300 bg-white px-3 py-2 text-sm text-stone-500"
+              >
+                <option value="">＋ 担当者を追加</option>
+                {users
+                  .filter((u) => !assignees.some((a) => a.userId === u.id))
+                  .map((u) => <option key={u.id} value={u.id}>{u.department} / {u.name}</option>)
+                }
+              </select>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-3 border-t border-stone-200 pt-4">
@@ -297,12 +278,21 @@ export default function AdminNewSubProjectPage() {
           >
             登録して続けて追加
           </button>
-          <Link
-            href={`/admin/projects/${parentId}`}
-            className="rounded border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-100"
-          >
-            キャンセル
-          </Link>
+          {hasExistingSubProjects ? (
+            <Link
+              href={`/admin/projects/${parentId}`}
+              className="rounded border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-100"
+            >
+              キャンセル
+            </Link>
+          ) : (
+            <Link
+              href={`/admin/projects/${parentId}`}
+              className="rounded border border-stone-200 px-4 py-2 text-stone-400 hover:bg-stone-50 text-sm"
+            >
+              子案件を追加せず親案件へ戻る
+            </Link>
+          )}
         </div>
       </form>
     </div>

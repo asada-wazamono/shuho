@@ -97,3 +97,38 @@ export async function POST(
 
   return Response.json({ ok: true, absorbedId: id, survivingId: intoId });
 }
+
+// DELETE: 統合解除
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession();
+  if (!session || session.role !== "admin") {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params; // id = 吸収された側（解除したい）案件のID
+
+  const absorbed = await prisma.project.findUnique({
+    where: { id },
+    select: { id: true, name: true, mergedIntoId: true },
+  });
+  if (!absorbed || !absorbed.mergedIntoId) {
+    return Response.json({ error: "この案件は統合されていません" }, { status: 400 });
+  }
+
+  // 名前が一致する子案件を元の親に戻す（ベストエフォート）
+  await prisma.subProject.updateMany({
+    where: { parentId: absorbed.mergedIntoId, name: absorbed.name },
+    data: { parentId: id },
+  });
+
+  // mergedIntoId をクリアして元の案件として復帰
+  await prisma.project.update({
+    where: { id },
+    data: { mergedIntoId: null },
+  });
+
+  return Response.json({ ok: true });
+}
