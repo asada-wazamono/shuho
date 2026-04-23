@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { parentId, name, departmentBudget, businessContent, periodStart, periodEnd, assignees } = body;
+  const { parentId, name, departmentBudget, businessContent, periodStart, periodEnd, note, assignees } = body;
 
   if (!parentId || !name) {
     return Response.json({ error: "親案件IDとプロジェクト名は必須です" }, { status: 400 });
@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
         businessContent: businessContent ? String(businessContent) : null,
         periodStart: periodStart ? new Date(periodStart) : null,
         periodEnd: periodEnd ? new Date(periodEnd) : null,
+        note: note ? String(note) : null,
         status: "active",
         assignees: {
           create: assigneeList.map((a) => ({

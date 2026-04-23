@@ -31,6 +31,7 @@ export default function NewSubProjectPage() {
     departmentBudget: "",
     periodStart: "",
     periodEnd: "",
+    note: "",
   });
   const [assignees, setAssignees] = useState<AssigneeEntry[]>([]);
 
@@ -46,6 +47,9 @@ export default function NewSubProjectPage() {
         setHasExistingSubProjects(
           Array.isArray(data.subProjects) && data.subProjects.length > 0
         );
+        if (data.note) {
+          setForm((f) => ({ ...f, note: data.note }));
+        }
         if (Array.isArray(data.assignees)) {
           setAssignees(
             data.assignees.map((a: { user: { id: string } }) => ({
@@ -90,6 +94,7 @@ export default function NewSubProjectPage() {
           departmentBudget: Number(form.departmentBudget),
           periodStart: form.periodStart || null,
           periodEnd: form.periodEnd || null,
+          note: form.note || null,
           assignees: assignees.filter((a) => a.userId),
         }),
       });
@@ -97,7 +102,7 @@ export default function NewSubProjectPage() {
       if (!res.ok) throw new Error(data.error || "登録に失敗しました");
 
       if (continueAdding) {
-        setForm({ name: "", businessContent: "", departmentBudget: "", periodStart: "", periodEnd: "" });
+        setForm({ name: "", businessContent: "", departmentBudget: "", periodStart: "", periodEnd: "", note: "" });
         setContinueAdding(false);
         setHasExistingSubProjects(true);
       } else {
@@ -193,6 +198,17 @@ export default function NewSubProjectPage() {
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
           </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-stone-700">備考</label>
+          <textarea
+            value={form.note}
+            onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+            rows={3}
+            placeholder="備考があれば入力"
+            className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
+          />
         </div>
 
         {/* 担当者（追加型） */}

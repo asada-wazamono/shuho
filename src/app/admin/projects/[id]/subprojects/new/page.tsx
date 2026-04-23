@@ -31,6 +31,7 @@ export default function AdminNewSubProjectPage() {
     departmentBudget: "",
     periodStart: "",
     periodEnd: "",
+    note: "",
   });
   const [assignees, setAssignees] = useState<AssigneeEntry[]>([]);
 
@@ -47,6 +48,10 @@ export default function AdminNewSubProjectPage() {
         setHasExistingSubProjects(
           Array.isArray(projectData.subProjects) && projectData.subProjects.length > 0
         );
+
+        if (projectData.note) {
+          setForm((f) => ({ ...f, note: projectData.note }));
+        }
 
         if (Array.isArray(projectData.assignees) && projectData.assignees.length > 0) {
           // 親案件の担当者のうち「現在の管理者以外」を抽出
@@ -107,6 +112,7 @@ export default function AdminNewSubProjectPage() {
           departmentBudget: Number(form.departmentBudget),
           periodStart: form.periodStart || null,
           periodEnd: form.periodEnd || null,
+          note: form.note || null,
           assignees: assignees.filter((a) => a.userId),
         }),
       });
@@ -114,7 +120,7 @@ export default function AdminNewSubProjectPage() {
       if (!res.ok) throw new Error(data.error || "登録に失敗しました");
 
       if (continueAdding) {
-        setForm({ name: "", businessContent: "", departmentBudget: "", periodStart: "", periodEnd: "" });
+        setForm({ name: "", businessContent: "", departmentBudget: "", periodStart: "", periodEnd: "", note: "" });
         setContinueAdding(false);
         setHasExistingSubProjects(true); // 1件登録済みになった
       } else {
@@ -211,6 +217,17 @@ export default function AdminNewSubProjectPage() {
               className="w-full rounded border border-stone-300 px-3 py-2"
             />
           </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-stone-700">備考</label>
+          <textarea
+            value={form.note}
+            onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+            rows={3}
+            placeholder="備考があれば入力"
+            className="w-full rounded border border-stone-300 px-3 py-2 text-sm"
+          />
         </div>
 
         {/* 担当者（追加型） */}
