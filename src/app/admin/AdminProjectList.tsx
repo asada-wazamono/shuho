@@ -78,6 +78,7 @@ type DecidedRow = {
   ownerDepartment: string;
   clientName: string;
   totalBudget: number | null;
+  note: string | null;
   updatedAt: string;
   subProject: SubProject;
 };
@@ -260,6 +261,7 @@ export function AdminProjectList() {
         ownerDepartment: p.ownerDepartment,
         clientName: p.client.name,
         totalBudget: p.totalBudget,
+        note: p.note,
         updatedAt: p.updatedAt,
         subProject: sp,
       }))
@@ -522,6 +524,7 @@ export function AdminProjectList() {
                 <SortTh k="periodStart"      label="実施期間" {...sortProps} />
                 <th className="p-2">担当者</th>
                 <SortTh k="updatedAt" label="最終更新日" {...sortProps} />
+                <th className="p-2">備考</th>
                 <th className="p-2"></th>
               </tr>
             </thead>
@@ -578,6 +581,18 @@ export function AdminProjectList() {
                         </div>
                       </td>
                       <td className="p-2">{new Date(firstRow.updatedAt).toLocaleDateString("ja")}</td>
+                      {i === 0 && (
+                        <td className="p-2" rowSpan={rowSpanCount}>
+                          <div className="group relative max-w-[120px]">
+                            <span className="block truncate text-xs">{firstRow.note ?? "-"}</span>
+                            {firstRow.note && (
+                              <div className="pointer-events-none absolute right-0 top-full z-50 hidden w-64 whitespace-pre-wrap rounded border border-stone-200 bg-white p-2 text-xs text-stone-700 shadow-lg group-hover:block">
+                                {firstRow.note}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      )}
                       <td className="p-2">
                         {i === 0 && sameClientCount > 0 && sourceProject && (
                           <button
