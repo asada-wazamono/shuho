@@ -46,43 +46,48 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const projects = await prisma.project.findMany({
-    where,
-    include: {
-      client: {
-        select: { id: true, name: true },
-      },
-      assignees: {
-        select: {
-          userId: true,
-          involvement: true,
-          user: { select: { id: true, name: true, department: true } },
+  try {
+    const projects = await prisma.project.findMany({
+      where,
+      include: {
+        client: {
+          select: { id: true, name: true },
         },
-      },
-      subProjects: {
-        select: {
-          id: true,
-          name: true,
-          status: true,
-          businessContent: true,
-          departmentBudget: true,
-          periodStart: true,
-          periodEnd: true,
-          assignees: {
-            select: {
-              userId: true,
-              involvement: true,
-              user: { select: { id: true, name: true, department: true } },
-            },
+        assignees: {
+          select: {
+            userId: true,
+            involvement: true,
+            user: { select: { id: true, name: true, department: true } },
           },
         },
-        orderBy: { createdAt: "asc" },
+        subProjects: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            businessContent: true,
+            departmentBudget: true,
+            periodStart: true,
+            periodEnd: true,
+            assignees: {
+              select: {
+                userId: true,
+                involvement: true,
+                user: { select: { id: true, name: true, department: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
       },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
-
-  return Response.json(projects);
+      orderBy: { updatedAt: "desc" },
+    });
+    return Response.json(projects);
+  } catch (e) {
+    console.error("projects GET error:", e);
+    const msg = e instanceof Error ? e.message : "不明なエラー";
+    return Response.json({ error: msg }, { status: 500 });
+  }
 }
 
 // POST: 新規親案件登録
