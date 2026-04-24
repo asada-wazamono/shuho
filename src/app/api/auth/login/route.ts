@@ -26,8 +26,7 @@ export async function POST(request: NextRequest) {
 
     return Response.json({ ok: true, role: user.role });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[login error]", msg);
-    return Response.json({ error: `サーバーエラー: ${msg}` }, { status: 500 });
+    console.error("[login error]", e instanceof Error ? e.message : String(e));
+    return Response.json({ error: "サーバーエラーが発生しました" }, { status: 500 });
   }
 }
